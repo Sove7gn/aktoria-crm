@@ -462,7 +462,7 @@ const S={
   sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
   close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"upcoming"}, expanded:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
-  postForm:null, postedLocal:{}, messagedLocal:{}, engTab:"todo", trackSort:"rate",
+  postForm:null, postedLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate",
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 
@@ -597,7 +597,12 @@ function build(){
   const p=S.raw.pipeline;
   if(p){
     const t=toObjects(p,1,2);M.headers=t.headers;
-    M.contacts=t.rows.filter(r=>r.Name).map(r=>{r._key=r.Name+"|"+r.Company;r._pri=num(r.Priority);r._fit=num(r["Fit (1-10)"]);r._status=r.Status||"To send";return r});
+    M.contacts=t.rows.filter(r=>r.Name).map(r=>{r._key=r.Name+"|"+r.Company;r._pri=num(r.Priority);r._fit=num(r["Fit (1-10)"]);
+      // Public page: show a saved change for 10 minutes, while Google's published copy catches up.
+      const loc=S.pipeLocal[r._row];
+      if(loc&&loc.name===r.Name&&Date.now()-loc.at<6e5){for(const k in loc.cells){const v=loc.cells[k];r[k]=typeof v==="number"?fmtSerial(v,k==="Sent on"):v}
+        if(loc.cells.Status&&r.Status!==loc.cells.Status)r["Next action"]="Updating…"}
+      r._status=r.Status||"To send";return r});
   }else{M.headers=[];M.contacts=[]}
   M.targets=S.raw.targets?toObjects(S.raw.targets,0,3).rows.filter(r=>r.Company):[];
   M.stats=S.raw.stats?toObjects(S.raw.stats,0,3).rows.filter(r=>r.Account):[];
@@ -777,9 +782,20 @@ function writeError(e){
 }
 async function write(c,cells,label){
   const mcp=S.mcp;
-  if(!mcp||S.busy.has(c._key))return false;
+  if((!mcp&&!S.pub)||S.busy.has(c._key))return false;
   S.busy.add(c._key);render();
   let ok=false;
+  if(!mcp){
+    // Public page: the Apps Script checks the row's name and company, then writes only the plain columns.
+    try{
+      const keep={};for(const k of Object.keys(cells))if(WRITABLE.has(k))keep[k]=cells[k];
+      await scriptCall({action:"pipeline",row:c._row,name:c.Name,company:c.Company,cells:keep});
+      S.pipeLocal[c._row]={cells:keep,at:Date.now(),name:c.Name};
+      build();ok=true;toast("Saved to the sheet: "+label);
+    }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+    S.busy.delete(c._key);render();
+    return ok;
+  }
   try{
     const ni=M.headers.indexOf("Name"),ci=M.headers.indexOf("Company");
     if(ni<0||ci<0)throw {code:"row_moved"};
@@ -907,7 +923,7 @@ function contactRow(c,actions){
     h("div",{class:"acts",onclick:ev=>ev.stopPropagation()},actions||[]));
 }
 function quickActions(c,bucket){
-  const busy=S.busy.has(c._key)||!S.mcp;
+  const busy=S.busy.has(c._key)||!canEdit();
   const m=messages(c);
   const b=(label,fn,primary)=>h("button",{class:"btn sm"+(primary?" primary":""),type:"button",disabled:busy||null,onclick:ev=>fn(ev.currentTarget)},label);
   const a=c["Next action"]||"";
@@ -1043,7 +1059,7 @@ function contactList(key,items,actionsFor,emptyTitle,emptyText){
   return items.length?h("div",{class:"list"},items.slice(0,shownOf(key)).map(c=>contactRow(c,actionsFor?actionsFor(c):[])),moreBtn(key,items.length)):emptyBox(emptyTitle,emptyText);
 }
 function inboundActions(c){
-  const busy=S.busy.has(c._key)||!S.mcp;
+  const busy=S.busy.has(c._key)||!canEdit();
   return (NEXT_STEPS[c._status]||[]).map(([s,l],i)=>h("button",{class:"btn sm"+(i===0?" primary":""),type:"button",disabled:busy||null,onclick:()=>setStatus(c,s)},l));
 }
 function viewReplies(){
@@ -1112,7 +1128,7 @@ function viewPipeline(){
   for(const c of list){const s=CLOSED.has(c._status)?"Closed":STAGES.indexOf(c._status)>=0?c._status:"To send";by[s].push(c)}
   // Follow-up columns stay hidden until someone actually gets a follow-up.
   const cols=all.filter(k=>!/^FU[12] sent$/.test(k)||by[k].length);
-  const canDrag=!!S.mcp;
+  const canDrag=canEdit();
   return [
     viewHead("Pipeline","Where every conversation stands. "+(canDrag?"Drag a card to change its stage; marking Sent records the time so follow-up dates fill in. ":"")+noFuYet(list)),
     h("div",{class:"board",id:"board"},cols.map(k=>{
@@ -1481,12 +1497,22 @@ function ourPostLink(raw,account){
   const hd=HANDLES[account];
   return m&&hd&&m[1].toLowerCase()===hd.toLowerCase()?"https://x.com/"+hd+"/status/"+m[2]:null;
 }
+// The team passcode is asked once and kept in this browser; without it the public page stays view only.
+function teamPass(){
+  let p=store.get("pass","");
+  if(!p){p=(window.prompt("Team passcode to save changes (ask Reyansh). You only enter it once on this browser.")||"").trim();if(p)store.set("pass",p)}
+  return p;
+}
 async function scriptCall(body){
+  const pass=teamPass();
+  if(!pass)throw new Error("No passcode entered, so nothing was saved");
   // A plain-text body keeps this a "simple" request, so the browser doesn't need a CORS preflight.
-  const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(Object.assign({token:PAGE_TOKEN},body))});
+  const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(Object.assign({token:PAGE_TOKEN,pass},body))});
   const text=await res.text();
+  if(/^bad pass/.test(text)){store.set("pass","");throw new Error("Wrong team passcode. Try again and it will ask for it")}
   if(!/^ok/.test(text))throw new Error(text||"The sheet didn't answer");
 }
+const canEdit=()=>!!S.mcp||!!S.pub;
 const putCells=(range,values)=>S.mcp.callTool(SERVER,"update_values",{spreadsheetId:SHEET_ID,range,values},{cache:false});
 const rerenderModal=()=>{if(S.compareKey)renderCompare(true)};
 async function savePosted(p,raw){
@@ -1771,7 +1797,7 @@ function viewEngagers(){
       h("div",{class:"msg current"},h("div",{class:"msg-h"},h("span",{class:"lbl"},"Message · send from "+(e["Send from"]||e.Account)),
         h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(e["DM ready"],ev.currentTarget)},"Copy")),h("p",null,e["DM ready"])),
       h("div",{class:"links"},ext(xUrl(e.Handle),"Open their profile"),ext(e["Their link"],e.How==="Quoted"?"Their quote":"Their reply"),
-        e.Status!=="Messaged"?h("button",{class:"btn primary sm",type:"button",disabled:busy||(!S.mcp&&!S.pub)||null,onclick:()=>saveMessaged(e)},busy?"Saving…":"Mark messaged"):null));
+        e.Status!=="Messaged"?h("button",{class:"btn primary sm",type:"button",disabled:busy||!canEdit()||null,onclick:()=>saveMessaged(e)},busy?"Saving…":"Mark messaged"):null));
   })),moreBtn("eng",list.length,true));
   return out;
 }
@@ -1829,7 +1855,7 @@ function renderDrawer(force){
   if(!force&&host.contains(a)&&/^(TEXTAREA|INPUT)$/.test(a.tagName)){S.drawerStale=true;return}
   S.drawerStale=false;
   document.body.classList.add("locked");
-  const busy=S.busy.has(c._key)||!S.mcp;
+  const busy=S.busy.has(c._key)||!canEdit();
   const m=messages(c);
   const wait=fuWaiting(c);
   const cur=c._status==="To send"?"opener":wait?"":c._status==="Sent"?"fu1":c._status==="FU1 sent"?"fu2":"";
@@ -1853,7 +1879,7 @@ function renderDrawer(force){
       h("div",{class:"d-sec"},h("span",{class:"lbl"},"Stage"),
         h("div",{class:"status-row"},statusSel,(NEXT_STEPS[c._status]||[]).filter(([s])=>!(wait&&/^FU[12] sent$/.test(s))).map(([s,l],i)=>h("button",{class:"btn"+(i===0?" primary":""),type:"button",disabled:busy||null,onclick:()=>setStatus(c,s)},l)),
           S.busy.has(c._key)?h("span",{class:"small muted"},"Saving to the sheet…"):null),
-        !S.mcp?h("span",{class:"small muted"},"Open on claude.ai with Google Sheets connected to change the stage."):null),
+        S.pub?h("span",{class:"small muted"},"Changes save to the sheet. The first time, it asks for the team passcode."):!S.mcp?h("span",{class:"small muted"},"Open on claude.ai with Google Sheets connected to change the stage."):null),
       (li||x||c.Email)?h("div",{class:"d-sec"},h("span",{class:"lbl"},"How to reach them"),h("div",{class:"link-row"},
         li?h("a",{class:"btn sm",href:li,target:"_blank",rel:"noopener"},"LinkedIn ↗"):null,
         x?h("a",{class:"btn sm",href:x,target:"_blank",rel:"noopener"},c["X handle"]+" on X ↗"):null),
