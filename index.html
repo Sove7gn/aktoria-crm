@@ -275,7 +275,14 @@ td.wrap-text{max-width:340px}
 .swaps .lbl{margin-right:4px}
 .modal{position:fixed;inset:0;z-index:45;overflow-y:auto;display:flex;justify-content:center;align-items:flex-start;
   padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.modal .scrim{position:fixed}
+.modal .scrim{position:fixed;z-index:0}
+/* Mark-as-posted form, post tracker chart and sparklines */
+.post-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%}
+.post-form input{flex:1 1 260px;min-width:0;border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:var(--bg)}
+.chart{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.chart svg{width:100%;height:auto;display:block}
+.spark{display:block}
+.why{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:13px}
 .modal-box{position:relative;z-index:1;background:var(--bg);border-radius:16px;box-shadow:var(--shadow);width:min(1240px,100%);padding:22px;display:flex;flex-direction:column;gap:16px}
 
 /* messages in the contact panel */
@@ -365,11 +372,18 @@ const RANGES={
   draftsA:"'Aktoria Posts'!A3:U200",
   accounts:"'Our Accounts'!A3:H6",
   weekly:"'Our Accounts'!A8:E40",
+  tracking:"'Post Tracking'!A3:J5000",
+  engagers:"'Post Engagers'!A3:Q2000",
 };
+// The sheet's Apps Script web app (aktoria-leads/xdm/sheet_sync.gs). From this page it can only mark one of our posts
+// posted (with a link to that account's own post) or one engager messaged; the token below allows nothing else.
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbwZIWaQQO3TnMVXW8rVlYCFngXTjbMCLIucz6ciAEdDGP_yY7NPb41dGox7WWX8mzk2jA/exec";
+const PAGE_TOKEN="aktoria-page-4Lm8";
+const HANDLES={Karan:"karanwalia_ai",Shreenabh:"ShreenabhA",Aktoria:"aktoriarobotics"};
 const PILOT={start:new Date(2026,9,25),end:new Date(2026,10,29),followerTarget:1000};
 // How much each format serves the pilot's goals (agreement section 1b): lead magnets and data first.
 const FORMAT_WEIGHT={"Lead magnet":1.6,"Data post":1.4,"Tagging post":1.35,"Founder story":1.25,"Contrarian take":1.05,"How it works":1,"Behind the scenes":.9,"Company news":.55,"Hiring":.3};
-const RANGE_NAMES={accounts:"Our Accounts",weekly:"Our Accounts (weekly)",pipeline:"DM Pipeline",targets:"Target Accounts",stats:"DM template totals",templates:"DM Templates",comps:"Competitors",people:"Competitor People",theirs:"Their Posts",ours:"Our Posts",draftsK:"Karan Posts",draftsS:"Shreenabh Posts",draftsA:"Aktoria Posts"};
+const RANGE_NAMES={accounts:"Our Accounts",weekly:"Our Accounts (weekly)",pipeline:"DM Pipeline",targets:"Target Accounts",stats:"DM template totals",templates:"DM Templates",comps:"Competitors",people:"Competitor People",theirs:"Their Posts",ours:"Our Posts",tracking:"Post Tracking",engagers:"Post Engagers",draftsK:"Karan Posts",draftsS:"Shreenabh Posts",draftsA:"Aktoria Posts"};
 const DRAFT_ACCOUNT={draftsK:"Karan",draftsS:"Shreenabh",draftsA:"Aktoria"};
 const OWNERS=["All","Karan","Shreenabh","Aktoria"];
 const STATUSES=["To send","Sent","FU1 sent","FU2 sent","Replied","Call booked","Customer","Not now","No reply","Do not contact"];
@@ -381,7 +395,7 @@ const SECTIONS=[
   {id:"home",label:"Home",sub:"Everything that needs you today",c:"home",views:[["today","Home"]]},
   {id:"outbound",label:"Outbound",sub:"DMs we send",c:"out",views:[["send","Send today"],["pipeline","Pipeline"],["people","People"],["companies","Companies"],["templates","DM templates"]]},
   {id:"inbound",label:"Inbound",sub:"Replies and calls",c:"in",views:[["replies","Replies"],["calls","Calls"],["engaged","Engaged with our posts"]]},
-  {id:"midbound",label:"Midbound",sub:"Posts that warm buyers up",c:"mid",views:[["our-posts","Our posts"],["numbers","Live numbers"],["their-posts","Their posts"],["competitors","Competitors"],["photos","Photos"]]},
+  {id:"midbound",label:"Midbound",sub:"Posts that warm buyers up",c:"mid",views:[["our-posts","Our posts"],["numbers","Post tracker"],["engagers","People to DM"],["their-posts","Their posts"],["competitors","Competitors"],["photos","Photos"]]},
 ];
 const HIDDEN_VIEWS={competitor:"midbound"};
 const VIEWS=SECTIONS.reduce((a,s)=>a.concat(s.views),[]).concat([["competitor","Competitor"]]);
@@ -447,8 +461,10 @@ const S={
   view:"today", q:"", f:{status:"",segment:"",channel:"",action:"",company:""},
   sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
   close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"upcoming"}, expanded:new Set(),
+  // Saved here until the sheet catches up (the published copy lags a few minutes).
+  postForm:null, postedLocal:{}, messagedLocal:{}, engTab:"todo", trackSort:"rate",
 };
-const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[]};
+const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -606,7 +622,11 @@ function build(){
     for(const t of same){const k=t._comp?t._comp.Name:t.Competitor;if(!byComp.has(k))byComp.set(k,[]);byComp.get(k).push(t)}
     same.forEach((t,i)=>{const mine=byComp.get(t._comp?t._comp.Name:t.Competitor);t._rank={comp:mine.indexOf(t)+1,compN:mine.length,all:i+1,allN:same.length}});
   }
-  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;return r}):[];
+  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
+    const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}return r}):[];
+  M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
+  M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
+    if(S.messagedLocal[r._row]&&r.Status!=="Messaged"){r.Status="Messaged";r["Messaged on"]=S.messagedLocal[r._row]}return r}):[];
   M.accounts=S.raw.accounts?toObjects(S.raw.accounts,0,3).rows.filter(r=>r.Account):[];
   M.weekly=S.raw.weekly?toObjects(S.raw.weekly,0,8).rows.filter(r=>r.Week):[];
   M.drafts=[];
@@ -648,7 +668,7 @@ function watch(key){
 }
 /* ---------- public mode (outside claude.ai, e.g. GitHub Pages): read the sheet published to the web, view only ---------- */
 const GIDS={"DM Pipeline":11,"Target Accounts":6,"DM Templates":22,"Competitors":7100101,"Competitor People":7100102,"Their Posts":7100103,
-  "Our Posts":7100104,"Karan Posts":4,"Shreenabh Posts":14,"Aktoria Posts":15,"Our Accounts":7100105};
+  "Our Posts":7100104,"Karan Posts":4,"Shreenabh Posts":14,"Aktoria Posts":15,"Our Accounts":7100105,"Post Tracking":7100106,"Post Engagers":7100107};
 const colNum=s=>[...s].reduce((n,ch)=>n*26+ch.charCodeAt(0)-64,0)-1;
 function parseRange(r){
   const m=r.match(/^'?(.+?)'?!([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
@@ -1391,7 +1411,7 @@ function compareEl(p){
     (ourViews!=null||oe!=null)?figRow([["Views",ourViews],["Engagement",oe],["Likes",p.Likes],["Replies",p.Replies],["Reposts",p.Reposts],["Bookmarks",p.Bookmarks],["Per 1K views",rate(oe,ourViews)]])
       :h("p",{class:"small muted",style:"margin:0"},"Our numbers show up here once it's posted."),
     h("div",{class:"side-text"},p["Our version"]||"–"),
-    h("div",{class:"links"},h("button",{class:"btn sm",type:"button",onclick:ev=>copy(p["Our version"],ev.currentTarget)},"Copy our version"),ext(p["Posted link"],"Open our post")));
+    h("div",{class:"links"},h("button",{class:"btn sm",type:"button",onclick:ev=>copy(p["Our version"],ev.currentTarget)},"Copy our version"),postControl(p)));
   let verdict=null;
   if(theirViews&&ourViews){
     const rt=rate(theirEng,theirViews),ro=rate(oe,ourViews);
@@ -1408,7 +1428,7 @@ function ourCard(p){
   const compName=(t&&t._comp?t._comp.Name:null)||p.Competitor||"a competitor";
   const openIt=()=>{S.compareKey=p._key;renderCompare(true)};
   return h("article",{class:"post clickable",tabindex:"0",title:"Open the full comparison",
-      onclick:ev=>{if(!ev.target.closest("a,button"))openIt()},onkeydown:ev=>{if(ev.key==="Enter"&&ev.target===ev.currentTarget)openIt()}},
+      onclick:ev=>{if(!ev.target.closest("a,button,input"))openIt()},onkeydown:ev=>{if(ev.key==="Enter"&&ev.target===ev.currentTarget)openIt()}},
     h("div",{class:"post-meta"},h("b",null,p.Account+"'s version of "+compName),h("span",null,[p.Date,p["Time (IST)"]?p["Time (IST)"]+" IST":""].filter(Boolean).join(", ")),
       pill(p["Post type"],"ink"),p["Aimed at"]?pill("For "+p["Aimed at"].toLowerCase(),"blue"):null,/\[blank\]/i.test(p["Our version"]||"")?pill("Has [blank]s to fill","amber"):null,
       h("span",{style:"margin-left:auto"},h("button",{class:"btn sm",type:"button",onclick:()=>{S.compareKey=p._key;renderCompare(true)}},"Open full screen"))),
@@ -1454,6 +1474,54 @@ function isNew(p){
 }
 const newPosts=()=>M.theirs.filter(isNew).sort((a,b)=>b._date-a._date);
 const postedOurs=()=>M.ours.filter(p=>safeUrl(p["Posted link"]));
+
+/* ---------- mark posted / mark messaged (claude.ai: the Sheets connector; public page: the sheet's Apps Script) ---------- */
+function ourPostLink(raw,account){
+  const m=String(raw||"").trim().match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  const hd=HANDLES[account];
+  return m&&hd&&m[1].toLowerCase()===hd.toLowerCase()?"https://x.com/"+hd+"/status/"+m[2]:null;
+}
+async function scriptCall(body){
+  // A plain-text body keeps this a "simple" request, so the browser doesn't need a CORS preflight.
+  const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(Object.assign({token:PAGE_TOKEN},body))});
+  const text=await res.text();
+  if(!/^ok/.test(text))throw new Error(text||"The sheet didn't answer");
+}
+const putCells=(range,values)=>S.mcp.callTool(SERVER,"update_values",{spreadsheetId:SHEET_ID,range,values},{cache:false});
+const rerenderModal=()=>{if(S.compareKey)renderCompare(true)};
+async function savePosted(p,raw){
+  const link=ourPostLink(raw,p.Account);
+  if(!link){toast("That isn't a post from @"+(HANDLES[p.Account]||"?")+". Paste the link of the post itself (x.com/…/status/…).",true);return}
+  S.busy.add(p._key);render();rerenderModal();
+  try{
+    if(S.mcp){await putCells("'Our Posts'!O"+p._row,[["Posted"]]);await putCells("'Our Posts'!Q"+p._row,[[link]])}
+    else await scriptCall({action:"posted",row:p._row,link});
+    S.postedLocal[p._row]=link;S.postForm=null;S.postDraft="";build();
+    toast("Marked as posted. Views, likes and replies show up in the Post tracker within 3 hours.");
+  }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+  S.busy.delete(p._key);render();rerenderModal();
+}
+async function saveMessaged(e){
+  const when=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  S.busy.add(e._key);render();
+  try{
+    if(S.mcp)await putCells("'Post Engagers'!P"+e._row+":Q"+e._row,[["Messaged",when]]);
+    else await scriptCall({action:"messaged",row:e._row,handle:e.Handle});
+    S.messagedLocal[e._row]=when;build();toast("Marked "+(e.Name||e.Handle)+" as messaged.");
+  }catch(err){toast("Couldn't save: "+(err&&err.message||err),true)}
+  S.busy.delete(e._key);render();
+}
+function postControl(p){
+  if(safeUrl(p["Posted link"]))return [pill("Posted","green"),ext(p["Posted link"],"Open our post")];
+  const busy=S.busy.has(p._key);
+  if(S.postForm!==p._key)return h("button",{class:"btn primary sm",type:"button",onclick:()=>{S.postForm=p._key;S.postDraft="";render();rerenderModal()}},"Mark as posted");
+  const inp=h("input",{type:"url",value:S.postDraft||"",placeholder:"Paste the link of "+p.Account+"'s post on X","aria-label":"Link to the post on X",autocomplete:"off",
+    oninput:ev=>{S.postDraft=ev.target.value},onkeydown:ev=>{if(ev.key==="Enter")savePosted(p,ev.target.value);if(ev.key==="Escape"){S.postForm=null;render();rerenderModal()}}});
+  if(!/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName||""))setTimeout(()=>inp.isConnected&&inp.focus(),0);
+  return h("div",{class:"post-form"},inp,
+    h("button",{class:"btn primary sm",type:"button",disabled:busy||null,onclick:()=>savePosted(p,inp.value)},busy?"Saving…":"Save"),
+    h("button",{class:"btn ghost sm",type:"button",onclick:()=>{S.postForm=null;render();rerenderModal()}},"Cancel"));
+}
 function median(a){a=a.filter(x=>x!=null).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2}
 
 /* ---------- what's working ---------- */
@@ -1523,26 +1591,188 @@ function viewCompetitor(){
 }
 
 /* ---------- live numbers ---------- */
+/* ---------- post tracker ---------- */
+// Latest numbers per post from Post Tracking (filled every 3 hours), joined to its Our Posts row when it came from the plan.
+function trackedPosts(){
+  const by=new Map();
+  for(const r of M.tracking){const k=linkKey(r["Post link"]);if(!by.has(k))by.set(k,[]);by.get(k).push(r)}
+  const plan=new Map(M.ours.filter(p=>safeUrl(p["Posted link"])).map(p=>[linkKey(p["Posted link"]),p]));
+  const said=new Map(M.engagers.map(e=>[linkKey(e["Our post link"]),e["Our post"]]));
+  const engOf=r=>["Likes","Replies","Reposts","Quotes","Bookmarks"].map(c=>num(r[c])||0).reduce((a,b)=>a+b,0);
+  const out=[];
+  for(const [k,hist] of by){
+    hist.sort((a,b)=>a._t-b._t);
+    const last=hist[hist.length-1],prev=hist.length>1?hist[hist.length-2]:null,p=plan.get(k)||null;
+    const views=num(last.Views),eng=engOf(last);
+    out.push({key:k,link:last["Post link"],account:last.Account,plan:p,hist,views,eng,rate:rate(eng,views),
+      likes:num(last.Likes)||0,replies:num(last.Replies)||0,reposts:num(last.Reposts)||0,bookmarks:num(last.Bookmarks)||0,
+      grew:prev?(views||0)-(num(prev.Views)||0):null,first:p&&p._date?p._date.getTime():hist[0]._t,
+      text:p?p["Our version"]:(said.get(k)||"")});
+  }
+  for(const [k,p] of plan)if(!by.has(k))out.push({key:k,link:p["Posted link"],account:p.Account,plan:p,hist:[],views:num(p.Views),eng:ourEng(p),
+    rate:rate(ourEng(p),num(p.Views)),likes:num(p.Likes)||0,replies:num(p.Replies)||0,reposts:num(p.Reposts)||0,bookmarks:num(p.Bookmarks)||0,
+    grew:null,first:p._date?p._date.getTime():0,text:p["Our version"],pending:true});
+  return out;
+}
+const fmtX=x=>(Math.round(x*10)/10)+"×";
+const r1=x=>Math.round(x*10)/10;
+// Plain reasons a post did well (or didn't), from its own numbers next to the account's other posts.
+function whyFor(t,all){
+  const out=[];
+  const mine=all.filter(x=>x.account===t.account&&x.rate!=null&&(x.views||0)>=30);
+  const med=median(mine.map(x=>x.rate));
+  if(t.rate!=null&&med&&mine.length>=2){const x=t.rate/med;
+    out.push(x>=1.2?fmtX(x)+" the engagement of "+t.account+"'s usual post ("+r1(t.rate)+" vs "+r1(med)+" per 1K views).":
+      x<=.8?"Below "+t.account+"'s usual: "+r1(t.rate)+" per 1K views vs "+r1(med)+".":"About "+t.account+"'s usual engagement ("+r1(t.rate)+" per 1K views).")}
+  if(t.replies>=3&&t.eng&&t.replies/t.eng>=.3)out.push("It started a conversation: "+t.replies+" replies. The people are under People to DM.");
+  if(t.bookmarks>=2&&t.eng&&t.bookmarks/t.eng>=.15)out.push(t.bookmarks+" people saved it, a sign the content was useful.");
+  if(t.reposts>=2)out.push(t.reposts+" reposts carried it past our own followers.");
+  const p=t.plan;
+  if(p){
+    const type=p["Post type"],sameType=all.filter(x=>x.plan&&x.plan["Post type"]===type&&x.rate!=null),allR=all.filter(x=>x.rate!=null);
+    if(type&&sameType.length>=2&&allR.length>=4){const tm=median(sameType.map(x=>x.rate)),om=median(allR.map(x=>x.rate));
+      if(tm&&om)out.push(type+" posts average "+r1(tm)+" per 1K views, against "+r1(om)+" for everything we post.")}
+    const o=originalFor(p);
+    if(o&&o._rank)out.push("It copies "+(o._comp?o._comp.Name:o.Competitor)+"'s #"+o._rank.comp+" post"+(o._rank.comp<=3?" (a proven format)":"")+".");
+    const media=String(p["Media needed"]||"");
+    out.push(!media||/^none/i.test(media)?"Text only.":"Posted with media ("+media.split(/[.(:]/)[0].trim().toLowerCase()+").");
+    const len=String(p["Our version"]||"").length;if(len)out.push(len<240?"Short: "+len+" characters.":"Long: "+len+" characters.");
+    if(p["Time (IST)"])out.push("Went out at "+p["Time (IST)"]+" IST.");
+  }
+  return out;
+}
+// Patterns across everything posted so far: which type, account and hour do best.
+function nextMoves(all){
+  const rated=all.filter(x=>x.rate!=null&&(x.views||0)>=30);
+  if(rated.length<3)return [];
+  const best=(keyOf,label)=>{const by=new Map();for(const t of rated){const k=keyOf(t);if(!k)continue;if(!by.has(k))by.set(k,[]);by.get(k).push(t.rate)}
+    const rows=Array.from(by,([k,v])=>({k,n:v.length,m:median(v)})).filter(r=>r.n>=2).sort((a,b)=>b.m-a.m);
+    return rows.length>=2?label(rows[0],rows[rows.length-1]):null};
+  const hourOf=t=>{const m=String((t.plan&&t.plan["Time (IST)"])||"").match(/^(\d{1,2})/);if(!m)return null;const hr=+m[1];return (hr>12?hr-12:hr)+(hr>=12?" PM":" AM")+" IST"};
+  return [
+    best(t=>t.plan&&t.plan["Post type"],(a,b)=>a.k+" posts do best ("+r1(a.m)+" per 1K views over "+a.n+" posts); "+b.k+" posts do worst ("+r1(b.m)+"). Plan more "+a.k.toLowerCase()+" posts."),
+    best(t=>t.account,(a,b)=>a.k+"'s posts get the most engagement per view ("+r1(a.m)+" per 1K), "+b.k+"'s the least ("+r1(b.m)+")."),
+    best(hourOf,(a,b)=>"Posts around "+a.k+" do best ("+r1(a.m)+" per 1K views); around "+b.k+" the least ("+r1(b.m)+")."),
+  ].filter(Boolean);
+}
+function svgFrom(markup){const d=document.createElement("div");d.innerHTML=markup;return d.firstElementChild}
+const ESC={"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"};
+const escText=s=>String(s).replace(/[&<>"]/g,c=>ESC[c]);
+// One or more lines over time. series: [{name,color,points:[[t,v],...]}]
+function lineChart(series,label){
+  const pts=series.flatMap(s=>s.points);
+  if(pts.length<2)return null;
+  const W=640,H=170,L=46,R=12,T=12,B=26;
+  const t0=Math.min(...pts.map(p=>p[0])),t1=Math.max(...pts.map(p=>p[0])),vmax=Math.max(1,...pts.map(p=>p[1]));
+  const x=t=>L+(t1>t0?(t-t0)/(t1-t0):.5)*(W-L-R),y=v=>T+(1-v/vmax)*(H-T-B);
+  const day=t=>{const d=new Date(t);return d.getDate()+" "+MON[d.getMonth()]};
+  const txt=(x0,y0,s,anchor)=>"<text x=\""+x0+"\" y=\""+y0+"\" font-size=\"11\" fill=\"var(--ink-3)\""+(anchor?" text-anchor=\""+anchor+"\"":"")+">"+escText(s)+"</text>";
+  let m="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 "+W+" "+H+"\" role=\"img\" aria-label=\""+escText(label)+"\">";
+  m+="<line x1=\""+L+"\" x2=\""+(W-R)+"\" y1=\""+y(0)+"\" y2=\""+y(0)+"\" stroke=\"var(--line-2)\"/>";
+  m+="<line x1=\""+L+"\" x2=\""+(W-R)+"\" y1=\""+y(vmax)+"\" y2=\""+y(vmax)+"\" stroke=\"var(--line)\" stroke-dasharray=\"3 3\"/>";
+  m+=txt(L-6,y(vmax)+4,fmtK(vmax),"end")+txt(L-6,y(0)+4,"0","end")+txt(L,H-6,day(t0))+txt(W-R,H-6,day(t1),"end");
+  for(const s of series){if(!s.points.length)continue;
+    m+="<polyline fill=\"none\" stroke=\""+s.color+"\" stroke-width=\"2\" stroke-linejoin=\"round\" points=\""+s.points.map(p=>x(p[0]).toFixed(1)+","+y(p[1]).toFixed(1)).join(" ")+"\"/>";
+    const e=s.points[s.points.length-1];m+="<circle cx=\""+x(e[0]).toFixed(1)+"\" cy=\""+y(e[1]).toFixed(1)+"\" r=\"3\" fill=\""+s.color+"\"/>"}
+  return svgFrom(m+"</svg>");
+}
+function spark(hist){
+  const v=hist.map(r=>num(r.Views)||0);
+  if(v.length<2)return h("span",{class:"small muted"},"–");
+  const W=90,H=24,max=Math.max(1,...v);
+  return svgFrom("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"spark\" width=\""+W+"\" height=\""+H+"\" viewBox=\"0 0 "+W+" "+H+"\" aria-hidden=\"true\"><polyline fill=\"none\" stroke=\"var(--mid)\" stroke-width=\"1.6\" points=\""+
+    v.map((n,i)=>(i/(v.length-1)*(W-2)+1).toFixed(1)+","+(H-2-n/max*(H-4)).toFixed(1)).join(" ")+"\"/></svg>");
+}
+const ACCOUNT_COLOR={Karan:"var(--out)",Shreenabh:"var(--mid)",Aktoria:"var(--in)"};
 function viewNumbers(){
   const own=a=>S.owner==="All"||a===S.owner;
-  const live=postedOurs().filter(p=>own(p.Account)).sort((a,b)=>((b._date||0)-(a._date||0)));
-  const views=live.map(p=>num(p.Views)).filter(x=>x!=null),engs=live.map(ourEng).filter(x=>x!=null);
-  const beat=live.filter(p=>/beat/i.test(p.Result||"")).length;
-  const tile=(v,l)=>h("div",{class:"kpi",style:"cursor:default"},h("span",{class:"lbl"},l),h("span",{class:"n"},v));
-  const out=[viewHead("Live numbers","How our published posts are doing, each next to the original it copied. Numbers refresh every 3 hours for a week after posting, then daily."),
-    h("div",{class:"kpis"},tile(live.length,"Posts live"),tile(fmtK(views.reduce((a,b)=>a+b,0)),"Total views"),tile(fmtK(engs.reduce((a,b)=>a+b,0)),"Total engagement"),tile(beat+" of "+live.filter(p=>p.Result).length,"Beat the original"))];
-  if(!live.length)out.push(emptyBox("Nothing published yet","When a post goes live, put its link in the Posted link column of the Our Posts tab. Its views and engagement then show up here."));
-  else out.push(h("div",{class:"tbl-wrap"},h("table",null,
-    h("thead",null,h("tr",null,["Our post","Account","Posted","Views","Engagement","Per 1K views","Theirs","Result"].map(t=>h("th",{scope:"col"},t)))),
-    h("tbody",null,live.slice(0,shownOf("numbers")).map(p=>{
-      const t=originalFor(p),ov=num(p.Views),oe=ourEng(p);
-      return h("tr",{class:"click",tabindex:"0",onclick:()=>{S.compareKey=p._key;renderCompare(true)},onkeydown:ev=>{if(ev.key==="Enter"){S.compareKey=p._key;renderCompare(true)}}},
-        h("td",{class:"wrap-text"},h("b",null,String(p["Our version"]||"").split("\n")[0]),h("div",{class:"small muted"},"Copied from "+((t&&t._comp?t._comp.Name:p.Competitor)||"–"))),
-        h("td",null,p.Account),h("td",{class:"num small"},p.Date||"–"),h("td",{class:"num"},fmtK(ov)),h("td",{class:"num"},fmtK(oe)),h("td",{class:"num"},fmtK(rate(oe,ov))),
-        h("td",{class:"num small"},t?fmtK(num(t.Views))+" views · "+fmtK(rate(t._eng,num(t.Views)))+" per 1K":"–"),
-        h("td",null,p.Result?pill(p.Result,/beat/i.test(p.Result)?"green":/flop/i.test(p.Result)?"red":"line"):h("span",{class:"small muted"},"After 7 days")));
-    })))),moreBtn("numbers",live.length,true));
+  const all=trackedPosts();
+  const live=all.filter(t=>own(t.account));
+  const sorters={rate:(a,b)=>(b.rate??-1)-(a.rate??-1),views:(a,b)=>(b.views||0)-(a.views||0),new:(a,b)=>(b.first||0)-(a.first||0)};
+  live.sort(sorters[S.trackSort]||sorters.rate);
+  const views=live.map(t=>t.views||0).reduce((a,b)=>a+b,0),eng=live.map(t=>t.eng||0).reduce((a,b)=>a+b,0);
+  const toDM=M.engagers.filter(e=>own(e.Account)&&e.Status!=="Messaged").length;
+  const tile=(v,l,go)=>h(go?"button":"div",{class:"kpi",type:go?"button":null,style:go?null:"cursor:default",onclick:go?()=>{location.hash=go}:null},h("span",{class:"lbl"},l),h("span",{class:"n"},v));
+  const out=[viewHead("Post tracker","How our X posts are doing, checked every 3 hours: views, likes, replies and reposts, how they grow, and why the best ones worked. Press Mark as posted on a post in Our posts so it's tracked; posts we put out without it are found by their text.")];
+  out.push(h("div",{class:"kpis"},tile(live.length,"Posts tracked"),tile(fmtK(views),"Views"),tile(fmtK(eng),"Likes, replies, reposts, saves"),
+    tile(rate(eng,views)!=null?r1(rate(eng,views)):"–","Engagement per 1K views"),tile(toDM,"People to DM","engagers")));
+  // Traction over time: views across all tracked posts at each check, and followers per account.
+  const times=Array.from(new Set(M.tracking.filter(r=>own(r.Account)).map(r=>r._t))).sort((a,b)=>a-b);
+  if(times.length>=2){
+    const hist=live.filter(t=>t.hist.length);
+    const totalAt=tt=>hist.reduce((s,t)=>{let v=0;for(const r of t.hist){if(r._t<=tt)v=num(r.Views)||0;else break}return s+v},0);
+    const vChart=lineChart([{name:"Views",color:"var(--ink)",points:times.map(tt=>[tt,totalAt(tt)])}],"Total views on our posts over time");
+    const accts=Object.keys(HANDLES).filter(own);
+    const fol=accts.map(a=>{const rows=M.tracking.filter(r=>r.Account===a&&num(r.Followers)!=null).sort((x,y)=>x._t-y._t);
+      const pts=[];for(const r of rows){if(!pts.length||pts[pts.length-1][0]!==r._t)pts.push([r._t,num(r.Followers)])}return {name:a,color:ACCOUNT_COLOR[a],points:pts}});
+    const fChart=lineChart(fol,"Followers per account over time");
+    out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Traction over time"),
+      h("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"},
+        vChart?h("div",{class:"chart"},h("span",{class:"lbl"},"Total views on our posts"),vChart):null,
+        fChart?h("div",{class:"chart"},h("span",{class:"lbl"},"Followers (goal: "+PILOT.followerTarget.toLocaleString()+" each)"),fChart,
+          h("div",{class:"chips"},fol.filter(f=>f.points.length).map(f=>{const a=f.points[0][1],b=f.points[f.points.length-1][1];
+            return h("span",{class:"chip",style:"border-color:"+f.color+";color:"+f.color},f.name+": "+fmtK(b)+(b-a?" ("+(b>a?"+":"")+(b-a)+")":""))}))):null)));
+  }else if(live.length)out.push(h("p",{class:"note"},"The traction chart fills in after the tracker's second check (it runs every 3 hours)."));
+  if(!live.length){out.push(emptyBox("No posts tracked yet","Open Our posts, press Mark as posted on a post you've put out and paste its X link. The tracker picks it up within 3 hours, and also finds our posts by their text."));return out}
+  // Best posts with the reasons.
+  const top=live.filter(t=>t.rate!=null&&(t.views||0)>=30).slice().sort(sorters.rate).slice(0,3);
+  if(top.length)out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"What did well and why"),
+    h("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(280px,1fr))"},top.map((t,i)=>h("article",{class:"post"},
+      h("div",{class:"post-meta"},pill("#"+(i+1),"ink"),h("b",null,t.account),h("span",null,fmtK(t.views)+" views · "+r1(t.rate)+" per 1K")),
+      h("p",{class:"body clamp",style:"margin:0;color:var(--ink)"},String(t.text||"Post on X").split("\n")[0]),
+      h("ul",{class:"why"},whyFor(t,all).map(s=>h("li",null,s))),
+      h("div",{class:"links"},t.plan?h("button",{class:"btn sm",type:"button",onclick:()=>{S.compareKey=t.plan._key;renderCompare(true)}},"Compare with the original"):null,ext(t.link,"Open on X")))))));
+  const moves=nextMoves(all.filter(t=>own(t.account)));
+  if(moves.length)out.push(h("section",{class:"panel"},h("h3",null,"Patterns so far"),moves.map(s=>h("p",{style:"margin:0"},s))));
+  // Every post.
+  const seg=[["rate","Best engagement"],["views","Most views"],["new","Newest"]];
+  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Every post",h("span",{class:"num"},live.length)),
+    h("div",{class:"seg",role:"group","aria-label":"Sort"},seg.map(([v,l])=>h("button",{type:"button","aria-pressed":String(S.trackSort===v),onclick:()=>{S.trackSort=v;render()}},l))),
+    h("div",{class:"tbl-wrap"},h("table",null,
+      h("thead",null,h("tr",null,["Post","Account","Views","Likes","Replies","Reposts","Per 1K views","Trend","Result"].map(t=>h("th",{scope:"col"},t)))),
+      h("tbody",null,live.slice(0,shownOf("numbers")).map(t=>{
+        const open=()=>{if(t.plan){S.compareKey=t.plan._key;renderCompare(true)}else window.open(t.link,"_blank","noopener")};
+        const o=t.plan?originalFor(t.plan):null;
+        return h("tr",{class:"click",tabindex:"0",onclick:open,onkeydown:ev=>{if(ev.key==="Enter")open()}},
+          h("td",{class:"wrap-text"},h("b",null,String(t.text||"Post on X").split("\n")[0].slice(0,110)),
+            h("div",{class:"small muted"},t.plan?"Copied from "+((o&&o._comp?o._comp.Name:t.plan.Competitor)||"a competitor")+" · "+(t.plan["Post type"]||""):"Not from the plan"),
+            t.pending?h("div",{class:"small muted"},"Waiting for the tracker's first check"):null),
+          h("td",null,t.account),
+          h("td",{class:"num"},fmtK(t.views),t.grew?h("div",{class:"small",style:"color:var(--green)"},"+"+fmtK(t.grew)+" since last check"):null),
+          h("td",{class:"num"},fmtK(t.likes)),h("td",{class:"num"},fmtK(t.replies)),h("td",{class:"num"},fmtK(t.reposts)),
+          h("td",{class:"num"},t.rate!=null?r1(t.rate):"–"),h("td",null,spark(t.hist)),
+          h("td",null,t.plan&&t.plan.Result?pill(t.plan.Result,/beat/i.test(t.plan.Result)?"green":"line"):h("span",{class:"small muted"},t.plan?"After 7 days":"–")));
+      })))),moreBtn("numbers",live.length,true)));
   const w=workingPanel();if(w)out.push(w);
+  return out;
+}
+
+/* ---------- people who replied to or quoted our posts ---------- */
+const FIT_ORDER={"Robotics leader":0,"Robotics":1,"Investor":2,"Other":3};
+function viewEngagers(){
+  const own=a=>S.owner==="All"||a===S.owner;
+  const q=S.q.trim().toLowerCase();
+  const all=M.engagers.filter(e=>own(e.Account)&&(!q||[e.Name,e.Handle,e.Bio,e["What they said"],e["Our post"]].join(" ").toLowerCase().indexOf(q)>=0));
+  const todo=all.filter(e=>e.Status!=="Messaged"),done=all.filter(e=>e.Status==="Messaged");
+  const list=(S.engTab==="done"?done:S.engTab==="all"?all:todo).slice().sort((a,b)=>((FIT_ORDER[a.Fit]??4)-(FIT_ORDER[b.Fit]??4))||((b["DMs open"]==="Yes")-(a["DMs open"]==="Yes"))||((num(b.Followers)||0)-(num(a.Followers)||0)));
+  const out=[viewHead("People to DM","Everyone who replied to or quoted our X posts, robotics people first, each with a message ready. Copy it, send it from the account shown, then mark them messaged. X only shows who liked a post to its author, so likers can't be listed here.")];
+  out.push(h("div",{class:"seg",role:"group","aria-label":"Show"},[["todo","To message",todo.length],["done","Messaged",done.length],["all","All",all.length]].map(([v,l,n])=>
+    h("button",{type:"button","aria-pressed":String(S.engTab===v),onclick:()=>{S.engTab=v;S.show.eng=0;render()}},l+" ("+n+")"))));
+  if(!list.length){out.push(emptyBox(S.raw.engagers?(S.engTab==="done"?"Nobody messaged yet":"Nobody to message yet"):"Loading…","The post tracker looks for new replies and quotes on our posts every 3 hours."));return out}
+  out.push(h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},list.slice(0,shownOf("eng")).map(e=>{
+    const busy=S.busy.has(e._key),fitKind=e.Fit==="Robotics leader"?"green":e.Fit==="Robotics"?"blue":"line";
+    const said=String(e["What they said"]||"").replace(/^(@\w+\s*)+/,"");
+    return h("article",{class:"post"},
+      h("div",{class:"post-meta"},h("b",null,e.Name||e.Handle),h("span",null,e.Handle+" · "+fmtK(num(e.Followers))+" followers"),pill(e.Fit,fitKind),
+        e["DMs open"]==="Yes"?pill("DMs open","green"):e["DMs open"]==="No"?pill("DMs closed","amber"):null,e.Status==="Messaged"?pill("Messaged "+(e["Messaged on"]||""),"ink"):null),
+      e.Bio?h("p",{class:"small muted",style:"margin:0"},e.Bio):null,
+      h("p",{style:"margin:0"},h("span",{class:"lbl"},e.How+" on "+e.Account+"'s post: "),"“"+String(e["Our post"]||"").slice(0,100)+"”"),
+      said?h("p",{style:"margin:0"},h("span",{class:"lbl"},"They said: "),"“"+said+"”"):null,
+      h("div",{class:"msg current"},h("div",{class:"msg-h"},h("span",{class:"lbl"},"Message · send from "+(e["Send from"]||e.Account)),
+        h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(e["DM ready"],ev.currentTarget)},"Copy")),h("p",null,e["DM ready"])),
+      h("div",{class:"links"},ext(xUrl(e.Handle),"Open their profile"),ext(e["Their link"],e.How==="Quoted"?"Their quote":"Their reply"),
+        e.Status!=="Messaged"?h("button",{class:"btn primary sm",type:"button",disabled:busy||(!S.mcp&&!S.pub)||null,onclick:()=>saveMessaged(e)},busy?"Saving…":"Mark messaged"):null));
+  })),moreBtn("eng",list.length,true));
   return out;
 }
 
@@ -1662,7 +1892,7 @@ document.addEventListener("keydown",ev=>{if(ev.key!=="Escape")return;if(S.compar
 /* ---------- render ---------- */
 let pending=false;
 function schedule(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render()})}
-const VIEW_FN={today:viewToday,competitor:viewCompetitor,numbers:viewNumbers,send:viewSend,replies:viewReplies,calls:viewCalls,engaged:viewEngaged,pipeline:viewPipeline,people:viewPeople,companies:viewCompanies,competitors:viewCompetitors,"their-posts":viewTheirPosts,"our-posts":viewOurPosts,photos:viewPhotos,templates:viewTemplates};
+const VIEW_FN={today:viewToday,competitor:viewCompetitor,numbers:viewNumbers,engagers:viewEngagers,send:viewSend,replies:viewReplies,calls:viewCalls,engaged:viewEngaged,pipeline:viewPipeline,people:viewPeople,companies:viewCompanies,competitors:viewCompetitors,"their-posts":viewTheirPosts,"our-posts":viewOurPosts,photos:viewPhotos,templates:viewTemplates};
 function render(){
   renderChrome();
   const main=$("#main"),y=window.scrollY,bd=$("#board"),bx=bd?bd.scrollLeft:0;
