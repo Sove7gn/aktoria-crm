@@ -673,24 +673,37 @@ function trimGrid(rows){
   while(out.length&&!out[out.length-1].length)out.pop();
   return out;
 }
+// The sheet's "File → Share → Publish to web" link: serves each whole tab as CSV, exactly as the cells show.
+const PUB_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRv5y9MKwPtY3td-l9AML2t-iJquWs2Xh1u2e8kzCH22rfN_SMiHqobeHFC9tQ1yJB0UazY5GHxhr6u/pub";
+// Rows between a range's first row and its header row (DM Pipeline starts with a summary line).
+const HEADER_OFFSET={pipeline:1};
 const tabCache={};
-async function fetchTab(tab){
-  // "File → Share → Publish to web" serves the whole tab as CSV with no type guessing.
-  const url="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/pub?gid="+GIDS[tab]+"&single=true&output=csv&t="+Date.now();
+async function getCSV(url){
   const res=await fetch(url);
   const text=res.ok?await res.text():"";
   if(!res.ok||/^\s*</.test(text))throw {code:"not_public"};
   return parseCSV(text);
+}
+const fetchTab=tab=>getCSV(PUB_URL+"?gid="+GIDS[tab]+"&single=true&output=csv&t="+Date.now());
+// Fallback while a fresh publish spreads across Google's servers: the link-shared query endpoint.
+// It guesses one type per column and blanks cells that don't fit, so it's only used when the published link fails.
+async function fetchRangeFallback(key,r){
+  const off=HEADER_OFFSET[key]||0,start=r.a1.replace(/\d+:/,(r.r0+1+off)+":");
+  const rows=await getCSV("https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&headers=1&gid="+GIDS[r.tab]+"&range="+start+"&t="+Date.now());
+  return Array(off).fill([]).concat(rows);
 }
 async function publicLoad(){
   for(const k in tabCache)delete tabCache[k];
   await Promise.all(Object.keys(RANGES).map(async key=>{
     const r=parseRange(RANGES[key]);
     try{
-      const grid=await (tabCache[r.tab]=tabCache[r.tab]||fetchTab(r.tab));
-      S.raw[key]=trimGrid(grid.slice(r.r0,r.r1+1).map(row=>row.slice(r.c0,r.c1+1)));
-      S.at[key]=Date.now();S.err[key]=null;
-    }catch(e){S.err[key]=e&&e.code?e:{code:"not_public"}}
+      let rows;
+      try{
+        const grid=await (tabCache[r.tab]=tabCache[r.tab]||fetchTab(r.tab));
+        rows=grid.slice(r.r0,r.r1+1).map(row=>row.slice(r.c0,r.c1+1));
+      }catch(e){rows=await fetchRangeFallback(key,r)}
+      S.raw[key]=trimGrid(rows);S.at[key]=Date.now();S.err[key]=null;
+    }catch(e){if(!S.raw[key])S.err[key]=e&&e.code?e:{code:"not_public"}}
   }));
   build();schedule();
 }
