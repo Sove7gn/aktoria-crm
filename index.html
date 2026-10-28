@@ -359,7 +359,7 @@ const SERVER="Google Sheets";
 const SHEET_URL="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/edit";
 const PIPE_TAB="'DM Pipeline'";
 const RANGES={
-  pipeline:"'DM Pipeline'!A2:AH1000",
+  pipeline:"'DM Pipeline'!A2:AJ1000",
   targets:"'Target Accounts'!A3:N300",
   stats:"'DM Templates'!A3:J6",
   templates:"'DM Templates'!A10:M40",
@@ -458,7 +458,7 @@ const savedOwner=store.get("owner","All");
 const S={
   mcp:undefined, raw:{}, at:{}, err:{},
   owner:OWNERS.indexOf(savedOwner)>=0?savedOwner:"All",
-  view:"today", q:"", f:{status:"",segment:"",channel:"",action:"",company:""},
+  view:"today", q:"", f:{status:"",segment:"",channel:"",action:"",company:"",fund:""},
   sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
   close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"topost"}, expanded:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
@@ -749,6 +749,18 @@ async function allow(){
   }catch(e){S.err.pipeline=e}
   render();
 }
+// Funding stage from the sheet (Exa lookup, 29 Oct). Team rule: only DM companies at Series A or later.
+function fundKind(c){
+  const f=String(c["Funding stage"]||"");
+  if(!f)return "";
+  if(/^(series|public|acquired)/i.test(f))return "ok";
+  if(/^(seed|pre-seed)/i.test(f))return "early";
+  return "unknown";
+}
+const FUND_LABEL={ok:"Series A or later",early:"Seed or pre-seed",unknown:"Unknown"};
+const sendable=c=>{const k=fundKind(c);return k!=="early"&&k!=="unknown"};
+const fundPill=c=>{const k=fundKind(c),f=String(c["Funding stage"]||"").split(" · ")[0];
+  return k==="ok"?pill(f,"green"):k==="early"?pill(f+": skip","amber"):k==="unknown"?pill("Funding unknown","line"):null};
 function scoped(){
   const q=S.q.trim().toLowerCase();
   return M.contacts.filter(c=>(S.owner==="All"||c.Owner===S.owner)&&(!q||[c.Name,c.Company,c.Role,c.Email,c["X handle"],c.Notes,c.Segment,c["Signal (why now)"]].join(" ").toLowerCase().indexOf(q)>=0));
@@ -950,7 +962,7 @@ const noFuYet=list=>{const n=list.filter(c=>c._status==="FU1 sent"||c._status===
 const ENGAGED=new Set(["Inbound engager","Competitor engager"]);
 function sectionCounts(list){
   const n=id=>list.filter(c=>bucket(id).test(c["Next action"])).length;
-  return {send:n("send"),fu:n("fu"),replies:n("reply"),calls:list.filter(c=>c._status==="Call booked").length,
+  return {send:list.filter(c=>bucket("send").test(c["Next action"])&&sendable(c)).length,fu:n("fu"),replies:n("reply"),calls:list.filter(c=>c._status==="Call booked").length,
     engaged:list.filter(c=>ENGAGED.has(c.Segment)).length,urgent:n("reply")+n("fu")+n("call")};
 }
 function viewToday(){
@@ -1103,7 +1115,10 @@ function viewSend(){
           h("div",{class:"who"},h("div",null,h("b",null,c.Name)," ",h("span",{class:"muted"},"· "+c.Company)),h("div",{class:"sub"},c["X handle"]||"")),
           h("div",{class:"ctx",style:"white-space:normal"},"Their X DMs need a passcode, so the message couldn't be sent. Moved to LinkedIn."),h("div",{class:"acts"},pill("Not sent","amber")))),moreBtn("dmnot",notSent.length))]:null));
   }
-  const groups=BUCKETS.filter(b=>["fu","send","noreply","research"].indexOf(b.id)>=0).map(b=>({b,items:list.filter(c=>b.test(c["Next action"])).sort(byPri)}));
+  // New first messages only go to Series A+ companies; follow-ups and the rest are unaffected.
+  const groups=BUCKETS.filter(b=>["fu","send","noreply","research"].indexOf(b.id)>=0).map(b=>({b,items:list.filter(c=>b.test(c["Next action"])&&(b.id!=="send"||sendable(c))).sort(byPri)}));
+  const held=list.filter(c=>bucket("send").test(c["Next action"])&&!sendable(c)).length;
+  if(held)out.push(h("p",{class:"note"},held+" people in the send list are hidden because their company is seed, pre-seed or its funding is unknown. We only DM Series A and later."));
   const queued=list.filter(c=>c["Next action"]==="Queued").length;
   out.push(h("div",{class:"kpis"},
     groups.filter(g=>g.b.id!=="noreply").map(g=>h("button",{class:"kpi",type:"button",onclick:()=>{const el=document.getElementById("b-"+g.b.id);if(el)el.scrollIntoView({behavior:"smooth",block:"start"})}},
@@ -1163,9 +1178,10 @@ function viewPeople(){
     sel("f-action","Next step","action",uniq(M.contacts.map(c=>c["Next action"])),al),
     sel("f-segment","Type","segment",uniq(M.contacts.map(c=>c.Segment)),segl),
     sel("f-channel","Channel","channel",uniq(M.contacts.map(c=>c.Channel))),
+    sel("f-fund","Funding","fund",["ok","early","unknown"],k=>FUND_LABEL[k]),
     f.company?h("span",{class:"pill line"},"Company: "+f.company,h("button",{class:"btn ghost sm",type:"button","aria-label":"Clear company",onclick:()=>{S.f.company="";render()}},"✕")):null,
-    (f.status||f.action||f.segment||f.channel||f.company)?h("button",{class:"btn ghost sm",type:"button",onclick:()=>{S.f={status:"",segment:"",channel:"",action:"",company:""};render()}},"Clear filters"):null);
-  list=list.filter(c=>(!f.status||c._status===f.status)&&(!f.action||c["Next action"]===f.action)&&(!f.segment||c.Segment===f.segment)&&(!f.channel||c.Channel===f.channel)&&(!f.company||c.Company===f.company));
+    (f.status||f.action||f.segment||f.channel||f.company||f.fund)?h("button",{class:"btn ghost sm",type:"button",onclick:()=>{S.f={status:"",segment:"",channel:"",action:"",company:"",fund:""};render()}},"Clear filters"):null);
+  list=list.filter(c=>(!f.status||c._status===f.status)&&(!f.action||c["Next action"]===f.action)&&(!f.segment||c.Segment===f.segment)&&(!f.channel||c.Channel===f.channel)&&(!f.company||c.Company===f.company)&&(!f.fund||fundKind(c)===f.fund));
   const sk=S.sort.key,dir=S.sort.dir;
   list.sort((a,b)=>{
     if(sk==="Priority")return dir*((a._pri==null?-99:a._pri)-(b._pri==null?-99:b._pri))||byPri(a,b);
@@ -1179,16 +1195,16 @@ function viewPeople(){
     viewHead("People","Everyone we're reaching out to, most important first.",h("span",{class:"num muted"},list.length+" of "+M.contacts.length)),
     filters,
     h("div",{class:"tbl-wrap"},h("table",null,
-      h("thead",null,h("tr",null,th("Priority","Priority"),th("Name","Name"),th("Company","Company"),th("Owner","Owner"),th("Channel",null),th("Stage","Status"),th("Next step",null),th("Fit","Fit"),th("Likely to buy",null))),
+      h("thead",null,h("tr",null,th("Priority","Priority"),th("Name","Name"),th("Company","Company"),th("Funding","Funding stage"),th("Owner","Owner"),th("Channel",null),th("Stage","Status"),th("Next step",null),th("Fit","Fit"),th("Likely to buy",null))),
       h("tbody",null,list.slice(0,shown).map(c=>h("tr",{class:"click",tabindex:"0",onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)},style:S.busy.has(c._key)?"opacity:.5":null},
         h("td",null,priBadge(c)),
         h("td",null,h("b",null,c.Name),h("div",{class:"small muted"},c.Role||"")),
-        h("td",null,c.Company),h("td",null,c.Owner||"–"),h("td",null,c.Channel||"–"),
+        h("td",null,c.Company),h("td",null,fundPill(c)||h("span",{class:"small muted"},"–")),h("td",null,c.Owner||"–"),h("td",null,c.Channel||"–"),
         h("td",null,pill(sl(c._status),statusKind(c._status))),
         h("td",null,pill(al(c["Next action"]),actionKind(c["Next action"]))),
         h("td",{class:"num"},c["Fit (1-10)"]||"–"),
         h("td",{class:"wrap-text small"},c["Likely to buy"]||(c["DM result"]&&/^not sent/i.test(c["DM result"])?h("span",{class:"muted"},"Not sent: DMs need a passcode"):h("span",{class:"muted"},plain(c["Signal (why now)"])))))),
-        !list.length?h("tr",null,h("td",{colspan:"9",class:"empty"},"No one matches these filters.")):null))),
+        !list.length?h("tr",null,h("td",{colspan:"10",class:"empty"},"No one matches these filters.")):null))),
     moreBtn("people",list.length,true)];
 }
 
@@ -1921,6 +1937,9 @@ function renderDrawer(force){
         li?h("a",{class:"btn sm",href:li,target:"_blank",rel:"noopener"},"LinkedIn ↗"):null,
         x?h("a",{class:"btn sm",href:x,target:"_blank",rel:"noopener"},c["X handle"]+" on X ↗"):null),
         c.Email?h("div",{class:"link-row"},h("code",null,c.Email),h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(c.Email,ev.currentTarget)},"Copy email")):null):null,
+      c["Funding stage"]?h("div",{class:"d-sec"},h("span",{class:"lbl"},"Funding"),
+        h("div",{class:"link-row"},fundPill(c),h("span",{class:"small"},c["Funding stage"]),ext(c["Funding source"],"Source")),
+        fundKind(c)==="early"?h("p",{class:"small muted",style:"margin:0"},"Seed or pre-seed: we don't DM these (no budget for Aktoria yet)."):null):null,
       (c["Likely to buy"]||c["DM result"])?h("div",{class:"d-sec"},
         c["Likely to buy"]?[h("span",{class:"lbl"},"Most likely to buy from Aktoria"),h("p",{class:"lead",style:"margin:0"},c["Likely to buy"])]:null,
         c["DM result"]?h("div",{class:/^not sent/i.test(c["DM result"])?"banner":"note"},c["DM result"]):null):null,
