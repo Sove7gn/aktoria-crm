@@ -283,6 +283,30 @@ td.wrap-text{max-width:340px}
 .chart svg{width:100%;height:auto;display:block}
 .spark{display:block}
 .why{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:13px}
+/* Calendar */
+table.cal td,table.cal th{vertical-align:top;min-width:150px}
+table.cal th[scope=row]{min-width:110px}
+table.cal .today{background:var(--soft)}
+.cal-post{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;text-align:left;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:6px;background:var(--bg);font:inherit;cursor:pointer}
+.cal-post:hover{border-color:var(--line-2)}
+.cal-t{font-size:12.5px;line-height:1.35;color:var(--ink)}
+/* Week grid */
+table.wk td{min-width:120px}
+table.wk td .wk-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--line-2)}
+.wk-green{background:var(--green-soft)}.wk-green .wk-dot{background:var(--green)!important}
+.wk-yellow{background:var(--amber-soft)}.wk-yellow .wk-dot{background:var(--amber)!important}
+.wk-red{background:var(--red-soft)}.wk-red .wk-dot{background:var(--red)!important}
+.wk-future{color:var(--ink-3)}
+/* Their posts -> our copies */
+.graph{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 10px}
+.g-col{flex:0 0 170px;display:flex;flex-direction:column;align-items:center}
+.g-node{display:flex;flex-direction:column;gap:4px;width:100%;border:1px solid var(--line-2);border-radius:10px;padding:10px;background:var(--bg);font:inherit;font-size:12.5px;text-align:left;color:var(--ink);text-decoration:none;cursor:pointer}
+.g-node.theirs{min-height:92px}
+.g-node.ours{border-color:var(--ink);background:var(--soft)}
+.g-node.empty{width:92px;height:92px;border-radius:50%;border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--ink-3)}
+.g-line{width:2px;height:34px;background:var(--ink);position:relative}
+.g-line::after{content:"";position:absolute;bottom:-1px;left:-4px;border:5px solid transparent;border-top-color:var(--ink)}
+.g-line.empty{background:var(--line-2)}.g-line.empty::after{border-top-color:var(--line-2)}
 .modal-box{position:relative;z-index:1;background:var(--bg);border-radius:16px;box-shadow:var(--shadow);width:min(1240px,100%);padding:22px;display:flex;flex-direction:column;gap:16px}
 
 /* messages in the contact panel */
@@ -393,12 +417,12 @@ const CLOSED=new Set(["Not now","No reply","Do not contact"]);
 const WRITABLE=new Set(["Status","Sent on","FU1 sent","FU2 sent","Replied on","Call on","Notes"]);
 const SECTIONS=[
   {id:"home",label:"Home",sub:"Everything that needs you today",c:"home",views:[["today","Home"]]},
-  {id:"outbound",label:"Outbound",sub:"DMs we send",c:"out",views:[["send","Send today"],["pipeline","Pipeline"],["people","People"],["companies","Companies"],["templates","DM templates"]]},
-  {id:"inbound",label:"Inbound",sub:"Replies and calls",c:"in",views:[["replies","Replies"],["calls","Calls"],["engaged","Engaged with our posts"]]},
-  {id:"midbound",label:"Midbound",sub:"Posts that warm buyers up",c:"mid",views:[["our-posts","Our posts"],["numbers","Post tracker"],["engagers","People to DM"],["their-posts","Their posts"],["competitors","Competitors"],["photos","Photos"]]},
+  {id:"outbound",label:"Outbound",sub:"DMs we send",c:"out",views:[["send","Send today"],["pipeline","Pipeline"]]},
+  {id:"inbound",label:"Inbound",sub:"Replies and calls",c:"in",views:[["replies","Replies"],["calls","Calls"]]},
+  {id:"midbound",label:"Midbound",sub:"Posts that warm buyers up",c:"mid",views:[["calendar","Calendar"],["our-posts","Our posts"],["numbers","Post tracker"],["engagers","People to DM"],["competitors","Competitors"]]},
 ];
-const HIDDEN_VIEWS={competitor:"midbound"};
-const VIEWS=SECTIONS.reduce((a,s)=>a.concat(s.views),[]).concat([["competitor","Competitor"]]);
+const HIDDEN_VIEWS={competitor:"midbound",people:"outbound",companies:"outbound",templates:"outbound",engaged:"midbound","their-posts":"midbound",photos:"midbound"};
+const VIEWS=SECTIONS.reduce((a,s)=>a.concat(s.views),[]).concat([["competitor","Competitor"],["people","People"],["companies","Companies"],["templates","DM templates"],["engaged","Engaged"],["their-posts","Their posts"],["photos","Photos"]]);
 const sectionOf=v=>SECTIONS.find(s=>s.views.some(x=>x[0]===v))||SECTIONS.find(s=>s.id===HIDDEN_VIEWS[v])||SECTIONS[0];
 const lastInSection={};
 const OLD_HASH={board:"pipeline",contacts:"people",accounts:"companies"};
@@ -462,7 +486,7 @@ const S={
   sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
   close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"topost"}, expanded:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
-  postForm:null, postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate",
+  postForm:null, postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate", calWeek:0,
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 
@@ -850,11 +874,12 @@ function renderChrome(){
   const sec=sectionOf(S.view);
   const fresh=newPosts().length;
   const counts={today:c.urgent,send:c.send+c.fu,people:list.length,companies:new Set(list.map(x=>x.Company)).size,replies:c.replies,calls:c.calls,engaged:c.engaged,
-    "our-posts":M.ours.length,numbers:postedOurs().length,"their-posts":M.theirs.length,competitors:M.comps.length};
+    "our-posts":M.ours.length,numbers:postedOurs().length,"their-posts":M.theirs.length,competitors:M.comps.length,
+    pipeline:list.length,engagers:M.engagers.filter(e=>e.Status!=="Messaged").length};
   $("#nav").replaceChildren(...SECTIONS.map(s=>h("div",{class:"nav-group",style:"--c:var(--"+s.c+");--cs:var(--"+s.c+"-soft)"},
     s.id!=="home"?h("div",{class:"nav-h"},h("i"),s.label," ",h("span",null,"· "+s.sub)):null,
     s.views.map(([id,label])=>{
-      const active=S.view===id||(S.view==="competitor"&&id==="competitors");
+      const active=S.view===id||NAV_PARENT[S.view]===id;
       const alert=(id==="competitors"&&fresh)||(id==="replies"&&c.replies);
       const n=id==="competitors"&&fresh?fresh+" new":counts[id];
       return h("a",{href:"#"+id,"aria-current":active?"page":null,onclick:ev=>{ev.preventDefault();menu(false);go(id)}},h("span",null,label),n?h("span",{class:"count"+(alert?" alert":"")},n):null);
@@ -1033,14 +1058,14 @@ function asksBlock(asks){
     text?h("div",null,h("button",{class:"btn primary sm",type:"button",onclick:ev=>copy("Questions for today's posts:\n"+text,ev.currentTarget)},"Copy today's questions for WhatsApp")):null);
 }
 /* ---------- best competitor posts to copy next ---------- */
-// Biggest competitor posts we haven't copied yet: by engagement, X first on ties, at most 3 per competitor.
+// Biggest posts we haven't copied yet: X by views (100K+ first), then LinkedIn by engagement, at most 3 per account.
 // Hiring and funding posts are left out (not pilot priorities).
 const SKIP_COPY=/\b(we('re| are) hiring|join (our|the) team|open roles?|raised|funding|seed round|series [a-c]|pre-seed|backed by)\b/i;
 function copyNext(limit){
   const copied=new Set(M.ours.map(o=>linkKey(o["Their link"])));
   const per=new Map(),out=[];
   const list=M.theirs.filter(t=>!copied.has(linkKey(t.Link))&&t._eng!=null&&t["Post type"]!=="Hiring"&&!SKIP_COPY.test(t["Full text"]||""))
-    .sort((a,b)=>b._eng-a._eng||(a._li?1:0)-(b._li?1:0));
+    .sort((a,b)=>(a._li?1:0)-(b._li?1:0)||viewsOf(b)-viewsOf(a)||b._eng-a._eng);
   for(const t of list){const k=t._comp?t._comp.Name:t.Competitor;if((per.get(k)||0)>=3)continue;per.set(k,(per.get(k)||0)+1);out.push(t);if(out.length>=limit)break}
   return out;
 }
@@ -1048,7 +1073,7 @@ function copyNextBlock(){
   const list=copyNext(10);
   if(!list.length)return null;
   return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"10 best posts to copy next",h("span",{class:"num"},list.length)),
-    h("p",{class:"sec-hint"},"The competitor posts with the most engagement that we haven't copied yet, biggest first (at most 3 per competitor, no hiring or funding posts). The nightly drafter works down this same list."),
+    h("p",{class:"sec-hint"},"The biggest posts in the space we haven't copied yet, by views (100K+ first; at most 3 per account, no hiring or funding posts). The nightly drafter works down this same list."),
     h("div",{class:"list"},list.map((t,i)=>h("div",{class:"row",style:"grid-template-columns:34px 130px minmax(0,1fr) auto;cursor:default"},
       h("b",{class:"num"},"#"+(i+1)),
       h("b",null,t._comp?t._comp.Name:t.Competitor),
@@ -1637,7 +1662,7 @@ function viewCompetitor(){
   const c=M.comps.find(x=>norm(x.Name)===S.compSlug);
   if(!c)return [viewHead("Competitor",M.comps.length?"No competitor with that name. Pick one from Competitors.":"Loading…")];
   const posts=postsOf(c);
-  const top=posts.slice().sort((a,b)=>(a._li-b._li)||((b._eng||0)-(a._eng||0)));
+  const top=posts.slice().sort((a,b)=>(a._li-b._li)||(viewsOf(b)-viewsOf(a))||((b._eng||0)-(a._eng||0)));
   const latest=posts.filter(p=>p._date).sort((a,b)=>b._date-a._date);
   const fresh=posts.filter(isNew);
   const people=M.people.filter(p=>compFor(p.Competitor)===c);
@@ -1653,10 +1678,11 @@ function viewCompetitor(){
     h("div",{class:"links"},ext(c.Website,host(safeUrl(c.Website)||"")),xUrl(c["X account"])?h("a",{class:"btn sm",href:xUrl(c["X account"]),target:"_blank",rel:"noopener"},c["X account"]+" ↗"):null,ext(c["LinkedIn page"],"LinkedIn"),ext(c["Proof link"],"Proof of what they sell")),
     h("div",{class:"kpis"},tile(c["X followers"]?fmtK(num(c["X followers"])):null,"X followers"),tile(c["LinkedIn followers"]?fmtK(num(c["LinkedIn followers"])):null,"LinkedIn followers"),
       tile(posts.length,"Posts saved"),tile(last30,"Posted in the last 30 days"),tile(medX!=null?fmtK(medX):(medLi!=null?fmtK(medLi):null),medX!=null?"Typical engagement on X":"Typical engagement on LinkedIn"),tile(best?best.type:null,"Their best post type")),
+    copyGraph(c,posts),
     fresh.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"New since your last visit",h("span",{class:"num"},fresh.length)),
       h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},fresh.map(postCard))):null,
     h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Their best posts of all time",h("span",{class:"num"},top.length)),
-      h("p",{class:"sec-hint"},"Ranked by engagement. X first, then LinkedIn. These are the posts we copy."),
+      h("p",{class:"sec-hint"},"Ranked by views (X first, then LinkedIn by engagement). These are the posts we copy."),
       top.length?[h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},top.slice(0,shownOf("ctop")).map(postCard)),moreBtn("ctop",top.length,true)]
         :emptyBox("No posts saved yet",c["X account"]?"They arrive with the next scrape.":"No company X account, so posts come from their founders and LinkedIn.")),
     latest.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Latest posts"),h("div",{class:"list"},latest.slice(0,shownOf("clatest")).map(p=>h("div",{class:"row",style:"grid-template-columns:90px minmax(0,1fr) auto;cursor:default"},
@@ -1670,6 +1696,95 @@ function viewCompetitor(){
 }
 
 /* ---------- live numbers ---------- */
+/* ---------- tabs inside a section (one nav item, several views) ---------- */
+// Pipeline holds the board, people, companies and DM templates; Our posts holds photos; Competitors holds all their posts.
+const SUB_TABS={
+  pipeline:[["pipeline","Board"],["people","People"],["companies","Companies"],["templates","DM templates"]],
+  "our-posts":[["our-posts","Posts"],["photos","Photos"]],
+  competitors:[["competitors","Competitors"],["their-posts","All their posts"]],
+};
+const NAV_PARENT={people:"pipeline",companies:"pipeline",templates:"pipeline",photos:"our-posts","their-posts":"competitors",competitor:"competitors",engaged:"engagers"};
+function subTabs(){
+  const parent=NAV_PARENT[S.view]||S.view,tabs=SUB_TABS[parent];
+  if(!tabs)return null;
+  return h("nav",{class:"subtabs","aria-label":"Views"},tabs.map(([id,label])=>h("a",{href:"#"+id,"aria-current":S.view===id?"page":null,onclick:ev=>{ev.preventDefault();go(id)}},label)));
+}
+
+/* ---------- content calendar ---------- */
+const DAY=864e5;
+function weekStart(offset){const d=new Date();d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;return new Date(d.getTime()-dow*DAY+offset*7*DAY)}
+const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+const STAGE_PILL={posted:["Posted","green"],scheduled:["Scheduled","blue"],topost:["To post","line"]};
+function viewCalendar(){
+  const accts=Object.keys(HANDLES).filter(a=>S.owner==="All"||a===S.owner);
+  const start=weekStart(S.calWeek||0),days=Array.from({length:7},(_,i)=>new Date(start.getTime()+i*DAY));
+  const today=new Date();
+  const posts=M.ours.filter(p=>p._date&&postStage(p)!=="later");
+  const cell=(a,d)=>posts.filter(p=>p.Account===a&&sameDay(p._date,d)).sort((x,y)=>minutesOf(x["Time (IST)"])-minutesOf(y["Time (IST)"]));
+  const fmt=d=>d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+  const total=posts.filter(p=>p._date>=start&&p._date<new Date(start.getTime()+7*DAY)&&accts.indexOf(p.Account)>=0);
+  const by=k=>total.filter(p=>postStage(p)===k).length;
+  return [
+    viewHead("Calendar","What each account posts each day: posted, scheduled, or still to post. The target is 5 a day per account. Open a post to see it next to the original.",
+      h("div",{class:"seg",role:"group","aria-label":"Week"},h("button",{type:"button",onclick:()=>{S.calWeek=(S.calWeek||0)-1;render()}},"← Last week"),
+        h("button",{type:"button","aria-pressed":String(!S.calWeek),onclick:()=>{S.calWeek=0;render()}},"This week"),h("button",{type:"button",onclick:()=>{S.calWeek=(S.calWeek||0)+1;render()}},"Next week →"))),
+    h("div",{class:"chips"},pill(by("posted")+" posted","green"),pill(by("scheduled")+" scheduled","blue"),pill(by("topost")+" to post","line"),
+      h("span",{class:"small muted"},fmt(days[0])+" to "+fmt(days[6]))),
+    h("div",{class:"tbl-wrap"},h("table",{class:"cal"},
+      h("thead",null,h("tr",null,h("th",{scope:"col"},"Account"),days.map(d=>h("th",{scope:"col",class:sameDay(d,today)?"today":null},fmt(d))))),
+      h("tbody",null,accts.map(a=>h("tr",null,h("th",{scope:"row"},a,h("div",{class:"small muted"},"@"+HANDLES[a])),
+        days.map(d=>{const list=cell(a,d);
+          return h("td",{class:sameDay(d,today)?"today":null},list.length?list.map(p=>{const [l,k]=STAGE_PILL[postStage(p)];
+            return h("button",{class:"cal-post",type:"button",onclick:()=>{S.compareKey=p._key;renderCompare(true)}},
+              h("span",{class:"small muted num"},p["Time (IST)"]||""),h("span",{class:"cal-t"},String(p["Our version"]||"").split("\n")[0].slice(0,60)),pill(l,k))})
+            :h("span",{class:"small muted"},"–"),
+            list.length?h("div",{class:"small "+(list.length>=5?"muted":"")},list.length+" of 5"):null)})))))),
+    !posts.length?emptyBox(S.raw.ours?"Nothing on the calendar yet":"Loading posts…",""):null];
+}
+
+/* ---------- this week, day by day (Post tracker) ---------- */
+// Green: hit 5 posts and engagement grew at least as much as the day before. Red: nothing posted, or engagement
+// gained fell by more than half. Yellow: everything in between. Grey: days still to come.
+function weekGrid(){
+  const accts=Object.keys(HANDLES).filter(a=>S.owner==="All"||a===S.owner);
+  const start=weekStart(0),days=Array.from({length:5},(_,i)=>new Date(start.getTime()+i*DAY));
+  const engAt=(a,t)=>{const last=new Map();for(const r of M.tracking){if(r.Account!==a||r._t>t)continue;const k=linkKey(r["Post link"]);const p=last.get(k);if(!p||r._t>p._t)last.set(k,r)}
+    let s=0;for(const r of last.values())s+=["Likes","Replies","Reposts","Quotes","Bookmarks"].map(c=>num(r[c])||0).reduce((x,y)=>x+y,0);return s};
+  const gained=(a,d)=>engAt(a,d.getTime()+DAY-1)-engAt(a,d.getTime()-1);
+  const postsOn=(a,d)=>M.ours.filter(p=>p.Account===a&&postStage(p)==="posted"&&sameDay(p._date,d)).length;
+  const now=Date.now();
+  const cellOf=(a,d)=>{
+    if(d.getTime()>now)return {k:"future",t:"–"};
+    const n=postsOn(a,d),g=gained(a,d),prev=gained(a,new Date(d.getTime()-DAY));
+    const k=n===0||(prev>0&&g<prev*.5)?"red":n>=5&&g>=prev?"green":"yellow";
+    const delta=prev>0?" ("+(g>=prev?"+":"")+Math.round((g-prev)/prev*100)+"%)":"";
+    return {k,t:n+" posted · +"+fmtK(g)+" engagement"+delta};
+  };
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"This week"),
+    h("p",{class:"sec-hint"},"Green: 5 posts and engagement grew vs the day before. Yellow: fewer posts or flat. Red: nothing posted, or engagement fell by more than half."),
+    h("div",{class:"tbl-wrap"},h("table",{class:"wk"},
+      h("thead",null,h("tr",null,h("th",{scope:"col"},"Account"),days.map(d=>h("th",{scope:"col"},d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric"}))))),
+      h("tbody",null,accts.map(a=>h("tr",null,h("th",{scope:"row"},a),days.map(d=>{const c=cellOf(a,d);return h("td",{class:"wk-"+c.k,title:c.t},h("span",{class:"wk-dot"}),h("span",{class:"small"},c.t))})))))));
+}
+
+/* ---------- their posts → our copies (competitor page) ---------- */
+const viewsOf=t=>num(t.Views)||0;
+function copyGraph(c,posts){
+  const top=posts.filter(t=>!t._li).sort((a,b)=>viewsOf(b)-viewsOf(a)).slice(0,6);
+  if(!top.length)return null;
+  const ourFor=t=>M.ours.find(o=>linkKey(o["Their link"])===linkKey(t.Link));
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Their biggest posts → our copies"),
+    h("p",{class:"sec-hint"},"Their top X posts by views, each linked to our version. An empty circle is a post we haven't copied yet: copy those next."),
+    h("div",{class:"graph"},top.map(t=>{const o=ourFor(t);
+      return h("div",{class:"g-col"},
+        h("a",{class:"g-node theirs",href:safeUrl(t.Link)||"#",target:"_blank",rel:"noopener"},h("b",{class:"num"},fmtK(viewsOf(t))+" views"),h("span",null,(t.Hook||t["Full text"]||"").split("\n")[0].slice(0,70))),
+        h("div",{class:"g-line"+(o?"":" empty")}),
+        o?h("button",{class:"g-node ours",type:"button",onclick:()=>{S.compareKey=o._key;renderCompare(true)}},h("b",null,"Ours · "+o.Account),
+            h("span",null,postStage(o)==="posted"?(o.Views?fmtK(num(o.Views))+" views":"Posted"):STAGE_PILL[postStage(o)]?STAGE_PILL[postStage(o)][0]:"Later"))
+          :h("button",{class:"g-node empty",type:"button",title:"Copy the original text",onclick:ev=>copy(t["Full text"],ev.currentTarget)},"Not copied yet"));
+    })));
+}
+
 /* ---------- post tracker ---------- */
 // Latest numbers per post from Post Tracking (filled every 3 hours), joined to its Our Posts row when it came from the plan.
 function trackedPosts(){
@@ -1775,6 +1890,7 @@ function viewNumbers(){
   const out=[viewHead("Post tracker","How our X posts are doing, checked every 3 hours: views, likes, replies and reposts, how they grow, and why the best ones worked. Press Mark as posted on a post in Our posts so it's tracked; posts we put out without it are found by their text.")];
   out.push(h("div",{class:"kpis"},tile(live.length,"Posts tracked"),tile(fmtK(views),"Views"),tile(fmtK(eng),"Likes, replies, reposts, saves"),
     tile(rate(eng,views)!=null?r1(rate(eng,views)):"–","Engagement per 1K views"),tile(toDM,"People to DM","engagers")));
+  out.push(weekGrid());
   // Traction over time: views across all tracked posts at each check, and followers per account.
   const times=Array.from(new Set(M.tracking.filter(r=>own(r.Account)).map(r=>r._t))).sort((a,b)=>a-b);
   if(times.length>=2){
@@ -1837,6 +1953,8 @@ function viewEngagers(){
   const out=[viewHead("People to DM","Everyone who replied to or quoted our X posts, robotics people first, each with a message ready. Copy it, send it from the account shown, then mark them messaged. X only shows who liked a post to its author, so likers can't be listed here.")];
   out.push(h("div",{class:"seg",role:"group","aria-label":"Show"},[["todo","To message",todo.length],["done","Messaged",done.length],["all","All",all.length]].map(([v,l,n])=>
     h("button",{type:"button","aria-pressed":String(S.engTab===v),onclick:()=>{S.engTab=v;S.show.eng=0;render()}},l+" ("+n+")"))));
+  const fromRivals=M.contacts.filter(c=>ENGAGED.has(c.Segment)).length;
+  if(fromRivals)out.push(h("p",{class:"note"},fromRivals+" more people who engaged with competitor posts are already in the DM list. ",h("a",{href:"#engaged",onclick:ev=>{ev.preventDefault();go("engaged")}},"See them")));
   if(!list.length){out.push(emptyBox(S.raw.engagers?(S.engTab==="done"?"Nobody messaged yet":"Nobody to message yet"):"Loading…","The post tracker looks for new replies and quotes on our posts every 3 hours."));return out}
   out.push(h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},list.slice(0,shownOf("eng")).map(e=>{
     const busy=S.busy.has(e._key),fitKind=e.Fit==="Robotics leader"?"green":e.Fit==="Robotics"?"blue":"line";
@@ -1974,13 +2092,15 @@ document.addEventListener("keydown",ev=>{if(ev.key!=="Escape")return;if(S.compar
 /* ---------- render ---------- */
 let pending=false;
 function schedule(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render()})}
-const VIEW_FN={today:viewToday,competitor:viewCompetitor,numbers:viewNumbers,engagers:viewEngagers,send:viewSend,replies:viewReplies,calls:viewCalls,engaged:viewEngaged,pipeline:viewPipeline,people:viewPeople,companies:viewCompanies,competitors:viewCompetitors,"their-posts":viewTheirPosts,"our-posts":viewOurPosts,photos:viewPhotos,templates:viewTemplates};
+const VIEW_FN={today:viewToday,competitor:viewCompetitor,numbers:viewNumbers,engagers:viewEngagers,calendar:viewCalendar,send:viewSend,replies:viewReplies,calls:viewCalls,engaged:viewEngaged,pipeline:viewPipeline,people:viewPeople,companies:viewCompanies,competitors:viewCompetitors,"their-posts":viewTheirPosts,"our-posts":viewOurPosts,photos:viewPhotos,templates:viewTemplates};
 function render(){
   renderChrome();
   const main=$("#main"),y=window.scrollY,bd=$("#board"),bx=bd?bd.scrollLeft:0;
   const g=gate();
   if(g){main.replaceChildren(g);renderDrawer();return}
-  main.replaceChildren(...[staleBanner()].concat((VIEW_FN[S.view]||viewToday)()).filter(Boolean));
+  const body=[].concat((VIEW_FN[S.view]||viewToday)()).filter(Boolean);
+  const tabs=subTabs();if(tabs)body.splice(body[0]&&body[0].classList&&body[0].classList.contains("head")?1:0,0,tabs);
+  main.replaceChildren(...[staleBanner()].concat(body).filter(Boolean));
   const nb=$("#board");if(nb&&bx)nb.scrollLeft=bx;
   window.scrollTo(0,y);
   renderDrawer();
