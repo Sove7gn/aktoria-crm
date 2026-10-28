@@ -460,9 +460,9 @@ const S={
   owner:OWNERS.indexOf(savedOwner)>=0?savedOwner:"All",
   view:"today", q:"", f:{status:"",segment:"",channel:"",action:"",company:""},
   sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
-  close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"upcoming"}, expanded:new Set(),
+  close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"topost"}, expanded:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
-  postForm:null, postedLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate",
+  postForm:null, postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate",
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 
@@ -628,7 +628,9 @@ function build(){
     same.forEach((t,i)=>{const mine=byComp.get(t._comp?t._comp.Name:t.Competitor);t._rank={comp:mine.indexOf(t)+1,compN:mine.length,all:i+1,allN:same.length}});
   }
   M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
-    const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}return r}):[];
+    const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}
+    const st=S.statusLocal[r._row];if(st&&!r["Posted link"]&&Date.now()-st.at<6e5)r.Status=st.status;
+    return r}):[];
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
   M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
     if(S.messagedLocal[r._row]&&r.Status!=="Messaged"){r.Status="Messaged";r["Messaged on"]=S.messagedLocal[r._row]}return r}):[];
@@ -1019,27 +1021,28 @@ function asksBlock(asks){
     text?h("div",null,h("button",{class:"btn primary sm",type:"button",onclick:ev=>copy("Questions for today's posts:\n"+text,ev.currentTarget)},"Copy today's questions for WhatsApp")):null);
 }
 /* ---------- best competitor posts to copy next ---------- */
+// Biggest competitor posts we haven't copied yet: by engagement, X first on ties, at most 3 per competitor.
+// Hiring and funding posts are left out (not pilot priorities).
+const SKIP_COPY=/\b(we('re| are) hiring|join (our|the) team|open roles?|raised|funding|seed round|series [a-c]|pre-seed|backed by)\b/i;
 function copyNext(limit){
   const copied=new Set(M.ours.map(o=>linkKey(o["Their link"])));
-  const per=new Map();
-  const scored=M.theirs.filter(t=>!copied.has(linkKey(t.Link))&&t._eng!=null&&t["Post type"]).map(t=>{
-    const r=t._li?(num(t["Per 1K followers"])||0)/10+Math.log10(1+t._eng):(rate(t._eng,num(t.Views))||0)/10+Math.log10(1+t._eng);
-    const close=t._comp&&/same|data/i.test(t._comp["How close"]||"")?1.15:1;
-    return {t,score:r*(FORMAT_WEIGHT[t["Post type"]]||1)*close*(t._li?.85:1)};
-  }).sort((a,b)=>b.score-a.score);
-  const out=[];
-  for(const s of scored){const k=s.t._comp?s.t._comp.Name:s.t.Competitor;if((per.get(k)||0)>=2)continue;per.set(k,(per.get(k)||0)+1);out.push(s.t);if(out.length>=limit)break}
+  const per=new Map(),out=[];
+  const list=M.theirs.filter(t=>!copied.has(linkKey(t.Link))&&t._eng!=null&&t["Post type"]!=="Hiring"&&!SKIP_COPY.test(t["Full text"]||""))
+    .sort((a,b)=>b._eng-a._eng||(a._li?1:0)-(b._li?1:0));
+  for(const t of list){const k=t._comp?t._comp.Name:t.Competitor;if((per.get(k)||0)>=3)continue;per.set(k,(per.get(k)||0)+1);out.push(t);if(out.length>=limit)break}
   return out;
 }
 function copyNextBlock(){
-  const list=copyNext(30);
+  const list=copyNext(10);
   if(!list.length)return null;
-  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Best to copy next",h("span",{class:"num"},list.length)),
-    h("p",{class:"sec-hint"},"Competitor posts we haven't copied yet, ranked by engagement and by the formats the pilot needs most (lead magnets, data posts, tagging posts, founder stories). At most 2 per competitor."),
-    h("div",{class:"list"},list.slice(0,shownOf("next")).map(t=>h("div",{class:"row",style:"grid-template-columns:130px minmax(0,1fr) auto;cursor:default"},
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"10 best posts to copy next",h("span",{class:"num"},list.length)),
+    h("p",{class:"sec-hint"},"The competitor posts with the most engagement that we haven't copied yet, biggest first (at most 3 per competitor, no hiring or funding posts). The nightly drafter works down this same list."),
+    h("div",{class:"list"},list.map((t,i)=>h("div",{class:"row",style:"grid-template-columns:34px 130px minmax(0,1fr) auto;cursor:default"},
+      h("b",{class:"num"},"#"+(i+1)),
       h("b",null,t._comp?t._comp.Name:t.Competitor),
-      h("div",{class:"who"},h("div",{style:"white-space:normal"},(t.Hook||t["Full text"]||"").split("\n")[0].slice(0,160)),h("div",{class:"sub"},t.Platform+" · "+(t.Date||"")+" · "+fmtK(t._eng)+" engagement"+(t.Views?" · "+fmtK(num(t.Views))+" views":"")+(t._rank?" · #"+t._rank.comp+" for "+(t._comp?t._comp.Name:t.Competitor):""))),
-      h("div",{class:"acts"},pill(t["Post type"],"ink"),h("button",{class:"btn sm",type:"button",onclick:ev=>copy(t["Full text"],ev.currentTarget)},"Copy original"),ext(t.Link,"Open")))),moreBtn("next",list.length)));
+      h("div",{class:"who"},h("div",{style:"white-space:normal"},(t.Hook||t["Full text"]||"").split("\n")[0].slice(0,160)),
+        h("div",{class:"sub"},t.Platform+" · "+(t.Date||"")+" · "+fmtK(t._eng)+" engagement"+(t.Views?" · "+fmtK(num(t.Views))+" views":"")+(t._rank?" · #"+t._rank.all+" of "+t._rank.allN+" on "+t.Platform:""))),
+      h("div",{class:"acts"},pill(t["Post type"],"ink"),h("button",{class:"btn sm",type:"button",onclick:ev=>copy(t["Full text"],ev.currentTarget)},"Copy original"),ext(t.Link,"Open"))))));
 }
 function paceBlock(stats){
   return h("div",{class:"sec-wrap"},h("h2",{class:"sec"},"DMs sent today"),h("div",{class:"pace"},stats.map(s=>{
@@ -1361,29 +1364,48 @@ function postCard(p){
 }
 
 /* ---------- Our posts ---------- */
+// Where a planned post stands: posted (has its link), scheduled, parked for later, or still to post.
+function postStage(p){
+  if(safeUrl(p["Posted link"]))return "posted";
+  if(/^scheduled/i.test(p.Status||""))return "scheduled";
+  if(/^later/i.test(p.Date||"")||/^later/i.test(p.Status||""))return "later";
+  return "topost";
+}
+const POST_TABS=[["topost","To post"],["scheduled","Scheduled"],["posted","Posted"],["later","Later"]];
+const POST_TAB_HINT={
+  topost:"Drafted and waiting to go out, earliest first. Schedule it in X, then press Mark as scheduled; or press Mark as posted with its link once it's live.",
+  scheduled:"Scheduled in X but not live yet. Once it goes out, press Mark as posted and paste its link so the Post tracker follows it.",
+  posted:"Live on X, newest first. Numbers are checked every 3 hours; open one to compare it with the original.",
+  later:"Parked: needs founder approval, swapped for a bigger original, or kept for another day. Still in the sheet.",
+};
 function viewOurPosts(){
   const q=S.q.trim().toLowerCase();
   const own=a=>S.owner==="All"||a===S.owner;
   const op=S.op;
-  const isLater=p=>/^later/i.test(p.Date||"")||/^later/i.test(p.Status||"");
+  if(!POST_TABS.some(t=>t[0]===op.when))op.when="topost";
   const all=M.ours.filter(p=>own(p.Account)&&(!q||[p["Our version"],p["Their post"],p.Competitor].join(" ").toLowerCase().indexOf(q)>=0));
-  const planned=all.filter(p=>(!op.type||p["Post type"]===op.type)&&(!op.aim||p["Aimed at"]===op.aim)&&(op.when==="all"||(op.when==="later")===isLater(p)))
-    .sort((a,b)=>((a._date?a._date.getTime():9e15)-(b._date?b._date.getTime():9e15))||String(a["Time (IST)"]).localeCompare(String(b["Time (IST)"])));
+  const when=p=>(p._date?p._date.getTime():9e15)+minutesOf(p["Time (IST)"])*6e4;
+  const inTab=all.filter(p=>postStage(p)===op.when&&(!op.type||p["Post type"]===op.type)&&(!op.aim||p["Aimed at"]===op.aim))
+    .sort(op.when==="posted"?(a,b)=>when(b)-when(a):(a,b)=>when(a)-when(b));
   const drafts=M.drafts.filter(d=>own(d._account)&&(!q||[d.Post,d["Inspired by"]].join(" ").toLowerCase().indexOf(q)>=0));
   const setOp=(k,v)=>{S.op[k]=v;S.show.ours=0;render()};
-  const typeCount=t=>all.filter(p=>p["Post type"]===t&&!isLater(p)).length;
-  const out=[viewHead("Our posts","What each account is posting, tagged by type and by who it's aimed at. Every post copies a competitor's winning post line for line and swaps in our facts; [blank] marks a fact we still need.")];
+  const count=t=>all.filter(p=>postStage(p)===t).length;
+  const out=[viewHead("Our posts","What each account is posting, copied line for line from competitors' biggest posts with our facts swapped in; [blank] marks a fact we still need. Posts move from To post to Scheduled to Posted as you mark them.")];
   out.push(h("div",{class:"filters"},
-    h("div",{class:"seg",role:"group","aria-label":"When"},[["upcoming","Scheduled"],["later","Later"],["all","All"]].map(([v,l])=>h("button",{type:"button","aria-pressed":String(op.when===v),onclick:()=>setOp("when",v)},l+" ("+(v==="all"?all.length:all.filter(p=>(v==="later")===isLater(p)).length)+")"))),
-    h("select",{class:"sel",id:"op-type","aria-label":"Post type",value:op.type,onchange:ev=>setOp("type",ev.target.value)},h("option",{value:""},"Every post type"),uniq(all.map(p=>p["Post type"])).map(t=>h("option",{value:t},t+" ("+typeCount(t)+" scheduled)"))),
+    h("div",{class:"seg",role:"group","aria-label":"Which posts"},POST_TABS.map(([v,l])=>h("button",{type:"button","aria-pressed":String(op.when===v),onclick:()=>setOp("when",v)},l+" ("+count(v)+")"))),
+    h("select",{class:"sel",id:"op-type","aria-label":"Post type",value:op.type,onchange:ev=>setOp("type",ev.target.value)},h("option",{value:""},"Every post type"),uniq(all.map(p=>p["Post type"])).map(t=>h("option",{value:t},t))),
     h("select",{class:"sel",id:"op-aim","aria-label":"Aimed at",value:op.aim,onchange:ev=>setOp("aim",ev.target.value)},h("option",{value:""},"Aimed at anyone"),uniq(all.map(p=>p["Aimed at"])).map(t=>h("option",{value:t},t)))));
-  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},op.when==="later"?"Later":"Planned from competitor posts",h("span",{class:"num"},planned.length)),
-    planned.length?[h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},planned.slice(0,shownOf("ours")).map(ourCard)),moreBtn("ours",planned.length,true)]
-      :emptyBox(S.raw.ours?"Nothing planned yet":"Loading planned posts…",S.raw.ours?"New posts are written after the first competitor scrape: 2 a day per account, at most 2 a week copied from any one competitor.":"")));
-  const nx=copyNextBlock();if(nx)out.push(nx);
+  const label=POST_TABS.find(t=>t[0]===op.when)[1];
+  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},label,h("span",{class:"num"},inTab.length)),h("p",{class:"sec-hint"},POST_TAB_HINT[op.when]),
+    inTab.length?[h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},inTab.slice(0,shownOf("ours")).map(ourCard)),moreBtn("ours",inTab.length,true)]
+      :emptyBox(S.raw.ours?"Nothing here":"Loading posts…",S.raw.ours?(op.when==="topost"?"Every drafted post is scheduled or posted. New drafts arrive every night: 5 per account.":""):"")));
+  if(op.when==="topost"){const nx=copyNextBlock();if(nx)out.push(nx)}
   if(drafts.length)out.push(h("p",{class:"note"},"The "+drafts.length+" older drafts (inspired by accounts outside the 20 competitors) are kept on the Karan, Shreenabh and Aktoria Posts tabs of the sheet and hidden here."));
   return out;
 }
+function minutesOf(t){const m=String(t||"").match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);if(!m)return 0;let hr=+m[1]%12;if(!m[3]&&+m[1]>=12)hr=+m[1];if(m[3]&&/pm/i.test(m[3]))hr+=12;
+  // Slots after midnight belong to the same evening's run.
+  if(hr<6)hr+=24;return hr*60+ +m[2]}
 const linkKey=u=>String(u||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/^(www\.|mobile\.)/,"").replace(/^twitter\.com/,"x.com").replace(/[?#].*$/,"").replace(/\/+$/,"");
 function originalFor(p){const k=linkKey(p["Their link"]);return k?M.theirs.find(t=>linkKey(t.Link)===k)||null:null}
 function copiesOf(t){const k=linkKey(t.Link);return k?M.ours.filter(p=>linkKey(p["Their link"])===k):[]}
@@ -1537,10 +1559,25 @@ async function saveMessaged(e){
   }catch(err){toast("Couldn't save: "+(err&&err.message||err),true)}
   S.busy.delete(e._key);render();
 }
+async function saveScheduled(p,on){
+  const status=on?"Scheduled":"Ready to post";
+  S.busy.add(p._key);render();rerenderModal();
+  try{
+    if(S.mcp)await putCells("'Our Posts'!O"+p._row,[[status]]);
+    else await scriptCall({action:"scheduled",row:p._row,on:!!on});
+    S.statusLocal[p._row]={status,at:Date.now()};build();
+    toast(on?"Moved to Scheduled. Add its link there once it's live.":"Moved back to To post.");
+  }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+  S.busy.delete(p._key);render();rerenderModal();
+}
 function postControl(p){
   if(safeUrl(p["Posted link"]))return [pill("Posted","green"),ext(p["Posted link"],"Open our post")];
-  const busy=S.busy.has(p._key);
-  if(S.postForm!==p._key)return h("button",{class:"btn primary sm",type:"button",onclick:()=>{S.postForm=p._key;S.postDraft="";render();rerenderModal()}},"Mark as posted");
+  const busy=S.busy.has(p._key),sched=postStage(p)==="scheduled";
+  const openForm=()=>{S.postForm=p._key;S.postDraft="";render();rerenderModal()};
+  if(S.postForm!==p._key)return sched?[pill("Scheduled","blue"),h("button",{class:"btn primary sm",type:"button",onclick:openForm},"It's live: add the link"),
+      h("button",{class:"btn ghost sm",type:"button",disabled:busy||null,onclick:()=>saveScheduled(p,false)},"Unschedule")]
+    :[h("button",{class:"btn sm",type:"button",disabled:busy||null,onclick:()=>saveScheduled(p,true)},busy?"Saving…":"Mark as scheduled"),
+      h("button",{class:"btn primary sm",type:"button",onclick:openForm},"Mark as posted")];
   const inp=h("input",{type:"url",value:S.postDraft||"",placeholder:"Paste the link of "+p.Account+"'s post on X","aria-label":"Link to the post on X",autocomplete:"off",
     oninput:ev=>{S.postDraft=ev.target.value},onkeydown:ev=>{if(ev.key==="Enter")savePosted(p,ev.target.value);if(ev.key==="Escape"){S.postForm=null;render();rerenderModal()}}});
   if(!/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName||""))setTimeout(()=>inp.isConnected&&inp.focus(),0);
