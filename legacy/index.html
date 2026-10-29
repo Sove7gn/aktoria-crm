@@ -1,0 +1,2132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Aktoria CRM</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: white sticky top bar (brand, owner switch, search, sync) over a tab rail; one working column below; the contact panel slides in from the right. Deliberately one light theme: white paper, black ink. */
+:root{
+  --bg:#FFFFFF; --ink:#0B0B0C; --ink-2:#3B3B41; --ink-3:#6B6B73; --line:#E8E8EB; --line-2:#D5D5DA; --soft:#F6F6F7; --on-ink:#FFFFFF;
+  --red:#B42318; --red-soft:#FDEEEC; --green:#11703A; --green-soft:#E9F6EE; --amber:#8A5A06; --amber-soft:#FCF3E1; --blue:#1E4BAF; --blue-soft:#EDF2FC;
+  --scrim:rgba(11,11,12,.30); --shadow:0 16px 48px rgba(11,11,12,.14);
+  --f-sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"Geist Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  --canvas:#F5F5F2; --card-shadow:0 1px 2px rgba(11,11,12,.05);
+  --out:#2353CF; --out-soft:#EAF0FD; --in:#0D8457; --in-soft:#E4F4EC; --mid:#6E36C9; --mid-soft:#F1EAFB; --home:#0B0B0C; --home-soft:#ECECE8;
+  --c:var(--home); --cs:var(--home-soft);
+  color-scheme:light;
+}
+html,body{background:var(--canvas)!important}
+.app{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}
+.sidenav{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line);
+  padding:calc(20px + env(safe-area-inset-top,0px)) 14px 18px max(14px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.sidenav .brand{padding:0 10px 6px}
+.nav{display:flex;flex-direction:column;gap:12px}
+.nav-group{display:flex;flex-direction:column;gap:1px}
+.nav-h{display:flex;align-items:center;gap:8px;font:600 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--c);padding:8px 10px 6px}
+.nav-h i{width:8px;height:8px;border-radius:3px;background:var(--c)}
+.nav-h span{font:400 11.5px/1.2 var(--f-sans);letter-spacing:0;text-transform:none;color:var(--ink-3)}
+.nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-weight:500;font-size:14px}
+.nav a:hover{background:var(--soft);color:var(--ink)}
+.nav a[aria-current="page"]{background:var(--cs);color:var(--c)}
+.nav a .count{font:12px var(--f-mono);color:var(--ink-3)}
+.nav a[aria-current="page"] .count{color:var(--c)}
+.nav a .count.alert{background:var(--red);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;align-items:flex-start;gap:6px;font-size:12.5px;color:var(--ink-3);padding:10px 10px 0;border-top:1px solid var(--line)}
+.side-foot .row-l{display:flex;align-items:center;gap:6px}
+.maincol{min-width:0}
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(245,245,242,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-block:10px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.topbar .search{max-width:520px}
+.topbar .menu-btn{display:none}
+.menu-scrim{position:fixed;inset:0;background:var(--scrim);z-index:49}
+main[data-sec="out"]{--c:var(--out);--cs:var(--out-soft)}
+main[data-sec="in"]{--c:var(--in);--cs:var(--in-soft)}
+main[data-sec="mid"]{--c:var(--mid);--cs:var(--mid-soft)}
+main .wrap{max-width:1180px}
+.panel,.post,.list,.tbl-wrap,.kpi,.pace-card,.section-card,.side,.folder,.gate{background:var(--bg);box-shadow:var(--card-shadow)}
+.col{background:#EDEDE9}
+.eyebrow{display:inline-flex;align-items:center;gap:7px;color:var(--c)!important;background:var(--cs);padding:5px 9px;border-radius:999px}
+.subtabs,.tabs{display:none}
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .sidenav{position:fixed;inset:0 auto 0 0;width:min(290px,86vw);z-index:50;transform:translateX(-105%);transition:transform .18s ease;box-shadow:var(--shadow)}
+  .sidenav.open{transform:none}
+  .topbar .menu-btn{display:inline-flex}
+  .topbar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--ink)}
+body{font:14px/1.5 var(--f-sans);-webkit-font-smoothing:antialiased}
+body.locked{overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
+a{color:var(--ink);text-underline-offset:3px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3)}
+.small{font-size:12.5px}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar-top{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding-block:12px 8px}
+.brand{display:flex;align-items:baseline;gap:8px;margin-right:4px;white-space:nowrap}
+.brand b{font-weight:700;font-size:18px;letter-spacing:-.02em}
+.brand span{font:500 11px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:7px;font-weight:500;font-size:13px;color:var(--ink-3);cursor:pointer;white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 0 0 1px var(--line-2)}
+.search{flex:1 1 220px;min-width:0;display:flex}
+.search input{width:100%;border:1px solid var(--line-2);background:var(--bg);border-radius:9px;padding:7px 11px;font-size:13.5px}
+.search input::placeholder{color:var(--ink-3)}
+.sync{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3);margin-left:auto;flex-wrap:wrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line-2);flex:none}
+.dot.ok{background:var(--green)} .dot.stale{background:var(--amber)} .dot.err{background:var(--red)}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:-1px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{padding:8px 10px 10px;border-bottom:2px solid transparent;color:var(--ink-3);text-decoration:none;font-weight:500;white-space:nowrap}
+.tabs a:hover{color:var(--ink)}
+.tabs a[aria-current="page"]{color:var(--ink);border-color:var(--ink)}
+.tabs .count{font:12px var(--f-mono);color:var(--ink-3);margin-left:5px}
+.tabs a{font-size:15px;padding:8px 12px 11px}
+.subbar{border-top:1px solid var(--line);background:var(--soft)}
+.subbar:has(.subtabs[hidden]){display:none}
+.subtabs{display:flex;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:8px}
+.subtabs::-webkit-scrollbar{display:none}
+.subtabs .sub-lbl{font-size:12.5px;color:var(--ink-3);margin-right:8px;white-space:nowrap}
+.subtabs a{padding:5px 11px;border-radius:999px;color:var(--ink-2);text-decoration:none;font-weight:500;font-size:13px;white-space:nowrap;border:1px solid transparent}
+.subtabs a:hover{background:var(--bg);border-color:var(--line)}
+.subtabs a[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
+.subtabs a[aria-current="page"] .count{color:var(--line-2)}
+.subtabs .count{font:12px var(--f-mono);color:var(--ink-3);margin-left:5px}
+.eyebrow{font:500 11.5px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.section-card{border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;text-align:left;background:var(--bg);cursor:pointer}
+.section-card:hover{border-color:var(--ink)}
+.section-card h2{margin:0;font-weight:650;font-size:20px;letter-spacing:-.02em}
+.section-card p{margin:2px 0 0;color:var(--ink-3);font-size:13.5px}
+.section-card .figs{gap:8px 26px}
+.section-card .fig b{font-size:26px;letter-spacing:-.02em}
+.section-card .go{font-weight:500;font-size:13.5px;margin-top:auto}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--bg);color:var(--ink);padding:6px 11px;border-radius:8px;font-weight:500;font-size:13px;cursor:pointer;white-space:nowrap;text-decoration:none;line-height:1.3}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.btn.primary:hover{background:#2a2a2e}
+.btn.ghost{border-color:transparent;background:none;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--soft)}
+.btn.sm{padding:3px 8px;font-size:12.5px}
+.btn[disabled]{opacity:.45;cursor:default}
+select.sel{border:1px solid var(--line-2);background:var(--bg);border-radius:8px;padding:6px 8px;font-size:13px;max-width:100%}
+
+/* page */
+main .wrap{padding-block:26px 80px;display:flex;flex-direction:column;gap:24px}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+.head h1{font-weight:650;font-size:26px;line-height:1.15;letter-spacing:-.025em;margin:0;text-wrap:balance}
+.head p{margin:4px 0 0;color:var(--ink-3);max-width:70ch;font-size:14.5px}
+h2.sec{font-weight:600;font-size:16px;letter-spacing:-.01em;margin:0;display:flex;align-items:center;gap:8px}
+h2.sec .num{font-size:12.5px;color:var(--ink-3);font-weight:400}
+.sec-wrap{display:flex;flex-direction:column;gap:10px;scroll-margin-top:120px}
+.sec-hint{margin:-4px 0 0;color:var(--ink-3);font-size:13px}
+.note{margin:0;color:var(--ink-3);font-size:13px;border-left:2px solid var(--line-2);padding-left:10px}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:500;background:var(--soft);color:var(--ink-2);white-space:nowrap;line-height:1.7;border:1px solid transparent}
+.pill.red{background:var(--red-soft);color:var(--red)}
+.pill.green{background:var(--green-soft);color:var(--green)}
+.pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.blue{background:var(--blue-soft);color:var(--blue)}
+.pill.ink{background:var(--ink);color:var(--on-ink)}
+.pill.line{background:var(--bg);border-color:var(--line-2);color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;padding:0 8px;border:1px solid var(--line);border-radius:6px;font-size:12px;color:var(--ink-2);white-space:nowrap;line-height:1.8}
+.pri{font:500 12.5px/1 var(--f-mono);min-width:28px;height:24px;padding:0 5px;display:inline-grid;place-items:center;border-radius:6px;border:1px solid var(--line-2);color:var(--ink-2)}
+.pri.p-hi{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+.pri.p-mid{border-color:var(--ink);color:var(--ink)}
+
+/* number tiles */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.kpi:hover{border-color:var(--line-2);background:var(--soft)}
+.kpi .lbl{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-3);font-weight:500}
+.kpi .n{font:500 30px/1 var(--f-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi .dot.red{background:var(--red)} .kpi .dot.green{background:var(--green)} .kpi .dot.blue{background:var(--blue)} .kpi .dot.amber{background:var(--amber)} .kpi .dot.ink{background:var(--ink)}
+
+/* pace */
+.pace{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.pace-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.pace-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pace-top b{font-weight:600}
+.meter{height:5px;border-radius:3px;background:var(--soft);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line)}
+.meter i{display:block;height:100%;background:var(--ink);border-radius:3px}
+.stats{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--ink-3)}
+.stats .num{color:var(--ink);font-weight:500}
+
+/* list rows */
+.list{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:grid;grid-template-columns:38px minmax(0,1.5fr) minmax(0,1fr) auto;gap:6px 14px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);cursor:pointer}
+.row:first-child{border-top:0}
+.row:hover{background:var(--soft)}
+.who{min-width:0}
+.who b{font-weight:600}
+.who>div,.ctx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .sub{font-size:12.5px;color:var(--ink-3)}
+.ctx{display:flex;gap:6px;align-items:center;min-width:0;font-size:13px;color:var(--ink-2)}
+.acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.more{display:flex;justify-content:center;padding:10px;border-top:1px solid var(--line)}
+.more.bare{border:0;padding:0}
+@media (max-width:720px){
+  .row{grid-template-columns:38px minmax(0,1fr)}
+  .row .ctx{grid-column:2}
+  .row .acts{grid-column:1/-1;justify-content:flex-start}
+}
+
+/* board */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(240px,1fr);gap:10px;overflow-x:auto;padding-bottom:8px;align-items:start}
+.col{background:var(--soft);border-radius:12px;display:flex;flex-direction:column;min-height:160px}
+.col.over{outline:2px dashed var(--ink);outline-offset:-2px}
+.col-h{padding:11px 12px 9px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600;font-size:13.5px}
+.cards{display:flex;flex-direction:column;gap:7px;padding:0 8px 8px}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:7px}
+.card[draggable="true"]{cursor:grab}
+.card:hover{border-color:var(--line-2)}
+.card.busy{opacity:.5}
+.card-top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.card-top .who{flex:1}
+.card-meta{display:flex;flex-wrap:wrap;gap:5px}
+
+/* tables */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;min-width:860px}
+th{text-align:left;font-weight:500;font-size:12px;color:var(--ink-3);padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--bg)}
+th button{all:unset;cursor:pointer}
+th button:hover{color:var(--ink)}
+th button:focus-visible{outline:2px solid var(--ink)}
+td{padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--soft)}
+td.wrap-text{max-width:340px}
+
+/* card grids */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+@media (max-width:440px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h3{margin:0;font-weight:600;font-size:17px;letter-spacing:-.015em;line-height:1.25}
+.panel-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.lead{margin:0;color:var(--ink-2)}
+.lbl{font-size:12px;color:var(--ink-3);font-weight:500}
+.figs{display:flex;flex-wrap:wrap;gap:6px 18px}
+.fig{display:flex;flex-direction:column}
+.fig b{font:500 15px var(--f-mono);font-variant-numeric:tabular-nums}
+.fig span{font-size:12px;color:var(--ink-3)}
+.ppl{display:flex;flex-direction:column;gap:5px;margin:0;padding:0;list-style:none}
+.ppl li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:13.5px}
+.ppl li .muted{font-size:12.5px}
+.ppl a{font-size:12.5px;color:var(--ink-3)}
+.links{display:flex;flex-wrap:wrap;gap:6px}
+.dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:5px 14px;margin:0;font-size:13px}
+.dl dt{color:var(--ink-3)}
+.dl dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+/* posts */
+.post{border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.post-meta{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:12.5px;color:var(--ink-3)}
+.post-meta b{color:var(--ink);font-weight:600;font-size:13.5px}
+.hook{margin:0;font-weight:600;font-size:15.5px;line-height:1.4;letter-spacing:-.01em;overflow-wrap:anywhere}
+.body{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-2)}
+.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.shape{font:12.5px/1.5 var(--f-mono);color:var(--ink-2);background:var(--soft);border-radius:7px;padding:7px 10px;overflow-wrap:anywhere}
+.trio{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.75fr);gap:12px}
+.trio>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.trio .box{border:1px solid var(--line);border-radius:9px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px}
+.trio .box.ours{border-color:var(--ink)}
+.trio ul{margin:0;padding-left:16px;font-size:13px;display:flex;flex-direction:column;gap:3px}
+@media (max-width:820px){.trio{grid-template-columns:minmax(0,1fr)}}
+
+/* side by side: their post and ours */
+.compare{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:820px){.compare{grid-template-columns:minmax(0,1fr)}}
+.side{border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;background:var(--bg)}
+.side.ours{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.side-h{display:flex;flex-direction:column;gap:5px}
+.side-who{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13px}
+.side-who b{font-size:15px}
+.side-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px;flex:1}
+.verdict{margin:0;font-weight:500;font-size:15px}
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px}
+.bar-t{height:8px;background:var(--soft);border-radius:4px;overflow:hidden}
+.bar-t i{display:block;height:100%;background:var(--mid);border-radius:4px}
+.bar-v{color:var(--ink-3);font-size:12px;white-space:nowrap}
+@media (max-width:560px){.bar-row{grid-template-columns:minmax(0,1fr) auto}.bar-t{grid-column:1/-1;order:3}}
+.post.clickable{cursor:pointer;transition:border-color .12s}
+.post.clickable:hover{border-color:var(--ink)}
+.swaps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.swaps .lbl{margin-right:4px}
+.modal{position:fixed;inset:0;z-index:45;overflow-y:auto;display:flex;justify-content:center;align-items:flex-start;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal .scrim{position:fixed;z-index:0}
+/* Mark-as-posted form, post tracker chart and sparklines */
+.post-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%}
+.post-form input{flex:1 1 260px;min-width:0;border:1px solid var(--line-2);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;background:var(--bg)}
+.chart{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.chart svg{width:100%;height:auto;display:block}
+.spark{display:block}
+.why{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:13px}
+/* Calendar */
+table.cal td,table.cal th{vertical-align:top;min-width:150px}
+table.cal th[scope=row]{min-width:110px}
+table.cal .today{background:var(--soft)}
+.cal-post{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;text-align:left;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:6px;background:var(--bg);font:inherit;cursor:pointer}
+.cal-post:hover{border-color:var(--line-2)}
+.cal-t{font-size:12.5px;line-height:1.35;color:var(--ink)}
+/* Week grid */
+table.wk td{min-width:120px}
+table.wk td .wk-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--line-2)}
+.wk-green{background:var(--green-soft)}.wk-green .wk-dot{background:var(--green)!important}
+.wk-yellow{background:var(--amber-soft)}.wk-yellow .wk-dot{background:var(--amber)!important}
+.wk-red{background:var(--red-soft)}.wk-red .wk-dot{background:var(--red)!important}
+.wk-future{color:var(--ink-3)}
+/* Their posts -> our copies */
+.graph{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 10px}
+.g-col{flex:0 0 170px;display:flex;flex-direction:column;align-items:center}
+.g-node{display:flex;flex-direction:column;gap:4px;width:100%;border:1px solid var(--line-2);border-radius:10px;padding:10px;background:var(--bg);font:inherit;font-size:12.5px;text-align:left;color:var(--ink);text-decoration:none;cursor:pointer}
+.g-node.theirs{min-height:92px}
+.g-node.ours{border-color:var(--ink);background:var(--soft)}
+.g-node.empty{width:92px;height:92px;border-radius:50%;border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--ink-3)}
+.g-line{width:2px;height:34px;background:var(--ink);position:relative}
+.g-line::after{content:"";position:absolute;bottom:-1px;left:-4px;border:5px solid transparent;border-top-color:var(--ink)}
+.g-line.empty{background:var(--line-2)}.g-line.empty::after{border-top-color:var(--line-2)}
+.modal-box{position:relative;z-index:1;background:var(--bg);border-radius:16px;box-shadow:var(--shadow);width:min(1240px,100%);padding:22px;display:flex;flex-direction:column;gap:16px}
+
+/* messages in the contact panel */
+.msg{border:1px solid var(--line);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.msg.current{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.msg-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.msg p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:var(--bg);z-index:41;overflow-y:auto;border-left:1px solid var(--line);box-shadow:var(--shadow);
+  padding:calc(18px + env(safe-area-inset-top,0px)) max(22px,env(safe-area-inset-right,0px)) calc(28px + env(safe-area-inset-bottom,0px)) 22px;display:flex;flex-direction:column;gap:20px}
+.d-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.d-head h2{margin:0;font-weight:650;font-size:23px;letter-spacing:-.02em;line-height:1.2}
+.d-head p{margin:3px 0 0;color:var(--ink-3)}
+.d-sec{display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.status-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.link-row{display:flex;gap:8px;align-items:center;min-width:0;flex-wrap:wrap}
+.link-row code{font-family:var(--f-mono);font-size:12.5px;user-select:all;overflow-wrap:anywhere}
+.timeline{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tl{border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.tl div:last-child{font-family:var(--f-mono);font-size:13px;margin-top:2px}
+textarea{width:100%;min-height:96px;border:1px solid var(--line-2);border-radius:9px;padding:9px 11px;background:var(--bg);resize:vertical}
+input[type="date"]{border:1px solid var(--line-2);border-radius:8px;padding:5px 8px;background:var(--bg)}
+
+/* folders */
+.folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.folder{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;text-decoration:none}
+.folder:hover{border-color:var(--ink)}
+.folder .fn{font:500 12px var(--f-mono);color:var(--ink-3)}
+.folder b{font-weight:600}
+.folder span{color:var(--ink-3);font-size:13px}
+
+/* states */
+.gate{max-width:600px;margin:56px auto;border:1px solid var(--line);border-radius:14px;padding:26px;display:flex;flex-direction:column;gap:12px}
+.gate h2{margin:0;font-weight:650;font-size:21px;letter-spacing:-.02em}
+.gate p{margin:0;color:var(--ink-2)}
+.gate ol{margin:0;padding-left:20px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
+.skel{height:12px;border-radius:6px;background:var(--soft)}
+.empty{padding:26px 18px;text-align:center;color:var(--ink-3)}
+.empty b{display:block;color:var(--ink);font-weight:600;margin-bottom:4px}
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:10px 14px;font-size:13px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--on-ink);padding:11px 16px;border-radius:10px;max-width:min(560px,calc(100% - 32px));box-shadow:var(--shadow);font-size:13.5px}
+.toast.err{background:var(--red)}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+
+<div class="app">
+  <aside class="sidenav" id="sidenav" aria-label="Main menu">
+    <div class="brand"><b>Aktoria</b><span>CRM</span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot" id="sync"></div>
+  </aside>
+  <div class="menu-scrim" id="menu-scrim" hidden></div>
+  <div class="maincol">
+    <header class="topbar">
+      <button class="btn menu-btn" id="menu-btn" type="button" aria-controls="sidenav" aria-expanded="false">Menu</button>
+      <label class="search"><input id="q" type="search" placeholder="Search" aria-label="Search" autocomplete="off"></label>
+      <div class="seg" id="owner-seg" role="group" aria-label="Whose work to show"></div>
+    </header>
+    <main><div class="wrap" id="main"></div></main>
+  </div>
+</div>
+<div id="drawer-host"></div>
+<div id="modal-host"></div>
+<div id="toast-host" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+const SHEET_ID="1MY0FGJrxb3n3Es7qjUzG3knFcmg8k4WL54RmFvdgVAA";
+const SERVER="Google Sheets";
+const SHEET_URL="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/edit";
+const PIPE_TAB="'DM Pipeline'";
+const RANGES={
+  pipeline:"'DM Pipeline'!A2:AJ1000",
+  targets:"'Target Accounts'!A3:N300",
+  stats:"'DM Templates'!A3:J6",
+  templates:"'DM Templates'!A10:M40",
+  comps:"'Competitors'!A3:O60",
+  people:"'Competitor People'!A3:H200",
+  theirs:"'Their Posts'!A3:AB1000",
+  ours:"'Our Posts'!A3:Y500",
+  draftsK:"'Karan Posts'!A3:U200",
+  draftsS:"'Shreenabh Posts'!A3:U200",
+  draftsA:"'Aktoria Posts'!A3:U200",
+  accounts:"'Our Accounts'!A3:H6",
+  weekly:"'Our Accounts'!A8:E40",
+  tracking:"'Post Tracking'!A3:J5000",
+  engagers:"'Post Engagers'!A3:Q2000",
+};
+// The sheet's Apps Script web app (aktoria-leads/xdm/sheet_sync.gs). From this page it can only mark one of our posts
+// posted (with a link to that account's own post) or one engager messaged; the token below allows nothing else.
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbwZIWaQQO3TnMVXW8rVlYCFngXTjbMCLIucz6ciAEdDGP_yY7NPb41dGox7WWX8mzk2jA/exec";
+const PAGE_TOKEN="aktoria-page-4Lm8";
+const HANDLES={Karan:"karanwalia_ai",Shreenabh:"ShreenabhA",Aktoria:"aktoriarobotics"};
+const PILOT={start:new Date(2026,9,25),end:new Date(2026,10,29),followerTarget:1000};
+// How much each format serves the pilot's goals (agreement section 1b): lead magnets and data first.
+const FORMAT_WEIGHT={"Lead magnet":1.6,"Data post":1.4,"Tagging post":1.35,"Founder story":1.25,"Contrarian take":1.05,"How it works":1,"Behind the scenes":.9,"Company news":.55,"Hiring":.3};
+const RANGE_NAMES={accounts:"Our Accounts",weekly:"Our Accounts (weekly)",pipeline:"DM Pipeline",targets:"Target Accounts",stats:"DM template totals",templates:"DM Templates",comps:"Competitors",people:"Competitor People",theirs:"Their Posts",ours:"Our Posts",tracking:"Post Tracking",engagers:"Post Engagers",draftsK:"Karan Posts",draftsS:"Shreenabh Posts",draftsA:"Aktoria Posts"};
+const DRAFT_ACCOUNT={draftsK:"Karan",draftsS:"Shreenabh",draftsA:"Aktoria"};
+const OWNERS=["All","Karan","Shreenabh","Aktoria"];
+const STATUSES=["To send","Sent","FU1 sent","FU2 sent","Replied","Call booked","Customer","Not now","No reply","Do not contact"];
+const STAGES=["To send","Sent","FU1 sent","FU2 sent","Replied","Call booked","Customer"];
+const CLOSED=new Set(["Not now","No reply","Do not contact"]);
+// Only plain-value columns. Everything else in DM Pipeline is an ARRAYFORMULA and must never be written.
+const WRITABLE=new Set(["Status","Sent on","FU1 sent","FU2 sent","Replied on","Call on","Notes"]);
+const SECTIONS=[
+  {id:"home",label:"Home",sub:"Everything that needs you today",c:"home",views:[["today","Home"]]},
+  {id:"outbound",label:"Outbound",sub:"DMs we send",c:"out",views:[["send","Send today"],["pipeline","Pipeline"]]},
+  {id:"inbound",label:"Inbound",sub:"Replies and calls",c:"in",views:[["replies","Replies"],["calls","Calls"]]},
+  {id:"midbound",label:"Midbound",sub:"Posts that warm buyers up",c:"mid",views:[["calendar","Calendar"],["our-posts","Our posts"],["numbers","Post tracker"],["engagers","People to DM"],["competitors","Competitors"]]},
+];
+const HIDDEN_VIEWS={competitor:"midbound",people:"outbound",companies:"outbound",templates:"outbound",engaged:"midbound","their-posts":"midbound",photos:"midbound"};
+const VIEWS=SECTIONS.reduce((a,s)=>a.concat(s.views),[]).concat([["competitor","Competitor"],["people","People"],["companies","Companies"],["templates","DM templates"],["engaged","Engaged"],["their-posts","Their posts"],["photos","Photos"]]);
+const sectionOf=v=>SECTIONS.find(s=>s.views.some(x=>x[0]===v))||SECTIONS.find(s=>s.id===HIDDEN_VIEWS[v])||SECTIONS[0];
+const lastInSection={};
+const OLD_HASH={board:"pipeline",contacts:"people",accounts:"companies"};
+const OWNER_VIEWS=new Set(["today","send","pipeline","people","companies","templates","replies","calls","engaged","our-posts"]);
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const STEP=10;
+const FOLDERS=[
+  {name:"Team photos",what:"Real photos of the team together.",id:"1JFbv1mYyiLop5gnqPhiLJ2_0Z4nuImqH"},
+  {name:"Work photos",what:"The operator floor in Noida, people at work.",id:"1pvUMv4UYo5rjEQxhqBd9G98SD1dgV3Hp"},
+  {name:"Robotics photos",what:"Robots we operate, on site or on the bench.",id:"189_AsdDudeByw_BmEsqFBF7dvXfKmPn_"},
+  {name:"Robot videos and takeover clips",what:"Screen recordings and clips of real takeovers.",id:"1RMTzVQVw_QOTYJSdMatV3GK-w5aD1MKY"},
+  {name:"Founder photos",what:"Karan and Shreenabh, alone or together.",id:"1mAP3i5CowQH-dJ4FABjfgjCiOYKCbKwH"},
+  {name:"Events, YC and press",what:"YC, demo days, events and press mentions.",id:"1-w6dfOeFNfEahzXLNUsk2tuMow0tUzmw"},
+  {name:"Numbers and screenshots",what:"Dashboards and stats we can turn into charts.",id:"1hOIqxKAq9_iKSPa92WQWy0mB9hiMkRdn"},
+];
+const folderUrl=id=>"https://drive.google.com/drive/folders/"+id;
+
+/* plain words for the sheet's own codes */
+const STATUS_LABEL={"FU1 sent":"Follow-up 1 sent","FU2 sent":"Follow-up 2 sent"};
+const ACTION_LABEL={"Send FU1 today":"Send follow-up 1 today","Send FU2 today":"Send follow-up 2 today","FU1 overdue":"Follow-up 1 is late","FU2 overdue":"Follow-up 2 is late",
+  "Enrich name first":"Find their full name first","Find X handle first":"Find their X handle first","Mark No reply":"Mark as no reply","Prep the call":"Get ready for the call",
+  "Send today · warm":"Send today (knows us)","Wait":"Waiting for a reply","Queued":"Queued for later"};
+const SEGMENT_LABEL={"Ops buyer":"Runs operations","Data/lab buyer":"Buys robot data","Inbound engager":"Engaged with our posts","Competitor engager":"Engaged with a competitor",
+  "Hiring signal":"Hiring for teleop","Practitioner":"Hands-on engineer","Warm network":"Knows us","Founder/CEO":"Founder or CEO"};
+const WARM_LABEL={Warm:"Knows us",Cold:"Doesn't know us yet"};
+const sl=s=>STATUS_LABEL[s]||s;
+const al=s=>ACTION_LABEL[s]||s;
+const segl=s=>SEGMENT_LABEL[s]||s;
+function plain(s){
+  s=String(s==null?"":s).replace(/ICP role match/gi,"Right role for us").replace(/\s*\((Apollo|Exa|Hunter|Apify)\)/g,"").replace(/\bICP\b/g,"buyers").replace(/\bHOT\b/g,"Ready to buy").replace(/\bEngager\b/g,"Engaged with a post");
+  return s.charAt(0).toUpperCase()+s.slice(1);
+}
+
+const NEXT_STEPS={
+  "To send":[["Sent","Mark sent"]],
+  "Sent":[["FU1 sent","Mark follow-up 1 sent"],["Replied","They replied"]],
+  "FU1 sent":[["FU2 sent","Mark follow-up 2 sent"],["Replied","They replied"]],
+  "FU2 sent":[["Replied","They replied"],["No reply","No reply"]],
+  "Replied":[["Call booked","Call booked"],["Not now","Not now"]],
+  "Call booked":[["Customer","Customer"],["Not now","Not now"]],
+};
+const BUCKETS=[
+  {id:"reply",label:"Reply now",kind:"red",test:a=>a==="Reply now",hint:"They answered. Reply while the thread is warm."},
+  {id:"fu",label:"Follow-ups due",kind:"red",test:a=>/FU[12]/.test(a)&&/(overdue|today)/.test(a),hint:"Day 3 and day 7 nudges. Copy the follow-up, send it, then mark it sent."},
+  {id:"call",label:"Calls to get ready for",kind:"green",test:a=>a==="Prep the call",hint:"Booked calls. Read why now and the notes before you join."},
+  {id:"send",label:"Send today",kind:"ink",test:a=>/^Send today/.test(a),hint:"Inside today's limit, most important first. Copy the first message, send it yourself, then mark it sent."},
+  {id:"noreply",label:"Mark as no reply",kind:"",test:a=>a==="Mark No reply",hint:"Two follow-ups and a week of silence."},
+  {id:"research",label:"Missing details",kind:"amber",test:a=>/first$/.test(a),hint:"Missing a full name or an X handle. Fix it in the sheet before sending."},
+];
+
+/* ---------- state ---------- */
+const store={
+  get(k,d){try{const v=localStorage.getItem("aktoria-crm:"+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem("aktoria-crm:"+k,JSON.stringify(v))}catch(e){}}
+};
+const savedOwner=store.get("owner","All");
+const S={
+  mcp:undefined, raw:{}, at:{}, err:{},
+  owner:OWNERS.indexOf(savedOwner)>=0?savedOwner:"All",
+  view:"today", q:"", f:{status:"",segment:"",channel:"",action:"",company:"",fund:""},
+  sort:{key:"Priority",dir:-1}, show:{}, openKey:null, busy:new Set(), drafts:{}, drawerStale:false,
+  close:"", tp:{comp:"",platform:"",type:"",time:"all",sort:"eng",timeTouched:false}, op:{type:"",aim:"",when:"topost"}, expanded:new Set(),
+  // Saved here until the sheet catches up (the published copy lags a few minutes).
+  postForm:null, postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, engTab:"todo", trackSort:"rate", calWeek:0,
+};
+const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+function h(tag,props,...kids){
+  const el=document.createElement(tag);
+  let value;
+  if(props)for(const k in props){
+    const v=props[k];
+    if(v==null||v===false)continue;
+    if(k==="class")el.className=v;
+    else if(k==="value")value=v;
+    else if(k.slice(0,2)==="on"&&typeof v==="function")el.addEventListener(k.slice(2),v);
+    else el.setAttribute(k,v===true?"":String(v));
+  }
+  for(const k of kids.flat(Infinity)){if(k==null||k===false)continue;el.append(k instanceof Node?k:String(k))}
+  if(value!==undefined)el.value=value;
+  return el;
+}
+const num=s=>{if(typeof s==="number")return s;const n=parseFloat(String(s==null?"":s).replace(/,/g,""));return isNaN(n)?null:n};
+function fmtK(n){
+  if(n==null||isNaN(n))return "–";
+  const a=Math.abs(n);
+  if(a>=1e6)return (n/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,"")+"M";
+  if(a>=1e3)return (n/1e3).toFixed(a>=1e4?0:1).replace(/\.0$/,"")+"K";
+  return String(Math.round(n*10)/10);
+}
+function col(i){let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
+function safeUrl(u){
+  u=String(u||"").trim();if(!u)return null;
+  if(/^https?:\/\//i.test(u))return u;
+  if(/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}(\/|$)/i.test(u))return "https://"+u;
+  return null;
+}
+function xUrl(handle){const m=String(handle||"").match(/@([A-Za-z0-9_]{1,15})/)||String(handle||"").match(/^([A-Za-z0-9_]{1,15})$/);return m?"https://x.com/"+m[1]:null}
+function host(u){try{return new URL(u).hostname.replace(/^www\./,"")}catch(e){return u}}
+function payloadOf(r){
+  let p=r&&r.payload;
+  if(typeof p==="string"){try{p=JSON.parse(p)}catch(e){p=null}}
+  if(!p||typeof p!=="object"){
+    const t=r&&Array.isArray(r.content)?(r.content.find(b=>b&&b.type==="text")||{}).text:null;
+    try{p=t?JSON.parse(t):null}catch(e){p=null}
+  }
+  return p;
+}
+function parseDate(s){
+  s=String(s||"").trim();if(!s)return null;
+  let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  m=s.match(/(\d{1,2})\s+([A-Za-z]{3})[a-z]*,?\s+(\d{4})/);
+  if(m){const mi=MON.indexOf(m[2].charAt(0).toUpperCase()+m[2].slice(1,3).toLowerCase());if(mi>=0)return new Date(+m[3],mi,+m[1])}
+  m=s.match(/([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s+(\d{4})/);
+  if(m){const mi=MON.indexOf(m[1].charAt(0).toUpperCase()+m[1].slice(1,3).toLowerCase());if(mi>=0)return new Date(+m[3],mi,+m[2])}
+  return null;
+}
+function sheetSerial(d,withTime){
+  const ms=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),withTime?d.getHours():0,withTime?d.getMinutes():0);
+  return Math.round((ms-Date.UTC(1899,11,30))/864e5*1e6)/1e6;
+}
+function fmtSerial(v,withTime){
+  const d=new Date(Date.UTC(1899,11,30)+v*864e5);
+  const day=d.getUTCDate()+" "+MON[d.getUTCMonth()];
+  return withTime?day+", "+d.getUTCHours()+":"+String(d.getUTCMinutes()).padStart(2,"0"):day;
+}
+function ago(ms){
+  const s=Math.max(0,Math.round((Date.now()-ms)/1000));
+  if(s<45)return "just now";const m=Math.round(s/60);if(m<60)return m+" min ago";
+  return Math.round(m/60)+" h ago";
+}
+// Scraped text sometimes keeps HTML codes (even doubled, like &amp;gt;); a textarea decodes them without running anything.
+function decodeEntities(s){if(!s||s.indexOf("&")<0)return s;const t=document.createElement("textarea");let prev;do{prev=s;t.innerHTML=s;s=t.value}while(s!==prev&&s.indexOf("&")>=0);return s}
+function pick(o,prefix){for(const k in o)if(k.indexOf(prefix)===0)return o[k];return ""}
+const firstName=n=>String(n||"").split(/\s+/)[0]||"";
+const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+function actionKind(a){
+  if(!a)return "";
+  if(a==="Reply now"||/overdue/.test(a))return "red";
+  if(a==="Prep the call")return "green";
+  if(/^Send/.test(a))return "ink";
+  if(/first$/.test(a))return "amber";
+  return "";
+}
+function statusKind(s){
+  if(s==="Replied")return "red";
+  if(s==="Call booked"||s==="Customer")return "green";
+  if(s==="Sent"||s==="FU1 sent"||s==="FU2 sent")return "blue";
+  if(s==="To send"||!s||CLOSED.has(s))return "";
+  return "amber";
+}
+function closeKind(c){c=String(c||"");if(/same/i.test(c))return "ink";if(/data/i.test(c))return "blue";return "line"}
+function priBadge(c){
+  const p=c._pri;
+  return h("span",{class:"pri "+(p>=10?"p-hi":p>=7?"p-mid":""),title:"Priority, worked out by the sheet"},p==null?"–":String(Math.round(p)));
+}
+const pill=(t,k)=>t?h("span",{class:"pill "+(k||"")},t):null;
+const byPri=(a,b)=>((b._pri==null?-99:b._pri)-(a._pri==null?-99:a._pri))||((b._fit||0)-(a._fit||0))||a.Name.localeCompare(b.Name);
+function ext(href,label,cls){const u=safeUrl(href);return u?h("a",{class:cls||"btn sm",href:u,target:"_blank",rel:"noopener"},label+" ↗"):null}
+
+let toastTimer;
+function toast(text,isErr){
+  const host=$("#toast-host");
+  host.replaceChildren(h("div",{class:"toast"+(isErr?" err":""),role:isErr?"alert":"status"},text));
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>host.replaceChildren(),isErr?7000:3200);
+}
+function copy(text,btn){
+  if(!text){toast("There's nothing to copy here yet.",true);return}
+  const done=()=>{if(btn){const o=btn.textContent;btn.textContent="Copied";setTimeout(()=>{btn.textContent=o},1400)}};
+  const blocked=()=>toast("Copying is blocked in this view. Select the text and copy it yourself.",true);
+  try{navigator.clipboard.writeText(text).then(done,blocked)}catch(e){blocked()}
+}
+function moreBtn(key,total,bare){
+  const shown=S.show[key]||STEP;
+  if(total<=shown)return null;
+  const next=Math.min(total-shown,shown<STEP*2?STEP:STEP*3);
+  return h("div",{class:"more"+(bare?" bare":"")},h("button",{class:"btn",type:"button",onclick:()=>{S.show[key]=shown+next;render()}},"Show "+next+" more ("+(total-shown)+" left)"));
+}
+const shownOf=key=>S.show[key]||STEP;
+function emptyBox(title,text){return h("div",{class:"list"},h("div",{class:"empty"},h("b",null,title),text||""))}
+
+/* ---------- data ---------- */
+function toObjects(values,hdrIdx,firstRow){
+  const hd=(values[hdrIdx]||[]).map(s=>String(s==null?"":s).trim());
+  const rows=[];
+  for(let i=hdrIdx+1;i<values.length;i++){
+    const r=values[i]||[];const o={_row:firstRow+i};
+    hd.forEach((k,j)=>{if(k)o[k]=r[j]==null?"":String(r[j]).trim()});
+    rows.push(o);
+  }
+  return {headers:hd,rows};
+}
+function build(){
+  const p=S.raw.pipeline;
+  if(p){
+    const t=toObjects(p,1,2);M.headers=t.headers;
+    M.contacts=t.rows.filter(r=>r.Name).map(r=>{r._key=r.Name+"|"+r.Company;r._pri=num(r.Priority);r._fit=num(r["Fit (1-10)"]);
+      // Public page: show a saved change for 10 minutes, while Google's published copy catches up.
+      const loc=S.pipeLocal[r._row];
+      if(loc&&loc.name===r.Name&&Date.now()-loc.at<6e5){for(const k in loc.cells){const v=loc.cells[k];r[k]=typeof v==="number"?fmtSerial(v,k==="Sent on"):v}
+        if(loc.cells.Status&&r.Status!==loc.cells.Status)r["Next action"]="Updating…"}
+      r._status=r.Status||"To send";return r});
+  }else{M.headers=[];M.contacts=[]}
+  M.targets=S.raw.targets?toObjects(S.raw.targets,0,3).rows.filter(r=>r.Company):[];
+  M.stats=S.raw.stats?toObjects(S.raw.stats,0,3).rows.filter(r=>r.Account):[];
+  M.templates=S.raw.templates?toObjects(S.raw.templates,0,10).rows.filter(r=>r.ID):[];
+  M.comps=S.raw.comps?toObjects(S.raw.comps,0,3).rows.filter(r=>r.Name):[];
+  M.people=S.raw.people?toObjects(S.raw.people,0,3).rows.filter(r=>r.Name&&r.Competitor):[];
+  // Rows marked "Earlier research" or "Hidden: ..." in Scraped on stay in the sheet but are hidden here.
+  M.theirs=S.raw.theirs?toObjects(S.raw.theirs,0,3).rows.filter(r=>r.Competitor&&(r.Link||r["Full text"])&&!/earlier research|^hidden/i.test(r["Scraped on"]||"")).map(r=>{
+    for(const k of ["Full text","Hook"])r[k]=decodeEntities(r[k]);
+    r._date=parseDate(r.Date);r._views=num(r.Views);
+    const li=/linkedin/i.test(r.Platform);r._li=li;
+    const parts=li?[r.Reactions,r.Comments,r.Reposts]:[r.Likes,r.Replies,r.Reposts,r.Quotes,r.Bookmarks];
+    const sum=parts.map(num).filter(x=>x!=null);
+    r._eng=num(r.Engagement)!=null?num(r.Engagement):(sum.length?sum.reduce((a,b)=>a+b,0):null);
+    r._comp=compFor(r.Competitor);r._key="t"+r._row;
+    return r;
+  }):[];
+  // Rank each saved post by engagement, within its competitor and across all 20, per platform.
+  for(const li of [false,true]){
+    const same=M.theirs.filter(t=>t._li===li&&t._eng!=null).sort((a,b)=>b._eng-a._eng);
+    const byComp=new Map();
+    for(const t of same){const k=t._comp?t._comp.Name:t.Competitor;if(!byComp.has(k))byComp.set(k,[]);byComp.get(k).push(t)}
+    same.forEach((t,i)=>{const mine=byComp.get(t._comp?t._comp.Name:t.Competitor);t._rank={comp:mine.indexOf(t)+1,compN:mine.length,all:i+1,allN:same.length}});
+  }
+  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
+    const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}
+    const st=S.statusLocal[r._row];if(st&&!r["Posted link"]&&Date.now()-st.at<6e5)r.Status=st.status;
+    return r}):[];
+  M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
+  M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
+    if(S.messagedLocal[r._row]&&r.Status!=="Messaged"){r.Status="Messaged";r["Messaged on"]=S.messagedLocal[r._row]}return r}):[];
+  M.accounts=S.raw.accounts?toObjects(S.raw.accounts,0,3).rows.filter(r=>r.Account):[];
+  M.weekly=S.raw.weekly?toObjects(S.raw.weekly,0,8).rows.filter(r=>r.Week):[];
+  M.drafts=[];
+  for(const k in DRAFT_ACCOUNT){
+    if(!S.raw[k])continue;
+    for(const r of toObjects(S.raw[k],0,3).rows){if(!r.Post)continue;r._account=DRAFT_ACCOUNT[k];r._key=k+r._row;M.drafts.push(r)}
+  }
+}
+function compFor(name){
+  const n=norm(name);if(!n)return null;
+  return M.comps.find(c=>{const cn=norm(c.Name);return cn&&(n===cn||n.indexOf(cn)===0||cn.indexOf(n)===0)})||null;
+}
+function compTokens(){
+  const t=[];
+  for(const c of M.comps){t.push(c.Name.toLowerCase());if(c["X account"])t.push(c["X account"].toLowerCase())}
+  for(const p of M.people){if(p.X)t.push(p.X.toLowerCase())}
+  return t.filter(x=>x.length>2);
+}
+function draftOrigin(d){
+  const src=((d["Inspired by"]||"")+" "+(d.Link||"")).toLowerCase();
+  if(/instagram/.test(src))return "instagram";
+  if(!M.comps.length)return "";
+  return compTokens().some(t=>src.indexOf(t)>=0)?"competitor":"old";
+}
+const DENIALS=new Set(["needs_reauth","server_not_connected","selection_required","server_not_found","blocked_by_policy","approval_required","not_in_manifest","consent_required","not_granted","capability_disabled","capability_removed"]);
+function ingest(key,result){
+  const p=payloadOf(result);
+  if(!p||typeof p!=="object"){S.err[key]={code:"bad_shape"};return}
+  S.raw[key]=Array.isArray(p.values)?p.values:[];
+  S.at[key]=(result.cache&&result.cache.storedAt)||Date.now();
+  S.err[key]=null;
+}
+function watch(key){
+  S.mcp.watchTool(SERVER,"get_values",{spreadsheetId:SHEET_ID,range:RANGES[key]},ev=>{
+    if(ev.type==="data")ingest(key,ev.result);
+    else{S.err[key]=ev.error||{code:"upstream_error"};if(DENIALS.has(S.err[key].code))S.raw[key]=null}
+    build();schedule();
+  },{cache:{staleTime:30000,gcTime:7*864e5},refetchInterval:key==="pipeline"?60000:300000});
+}
+/* ---------- public mode (outside claude.ai, e.g. GitHub Pages): read the sheet published to the web, view only ---------- */
+const GIDS={"DM Pipeline":11,"Target Accounts":6,"DM Templates":22,"Competitors":7100101,"Competitor People":7100102,"Their Posts":7100103,
+  "Our Posts":7100104,"Karan Posts":4,"Shreenabh Posts":14,"Aktoria Posts":15,"Our Accounts":7100105,"Post Tracking":7100106,"Post Engagers":7100107};
+const colNum=s=>[...s].reduce((n,ch)=>n*26+ch.charCodeAt(0)-64,0)-1;
+function parseRange(r){
+  const m=r.match(/^'?(.+?)'?!([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+  return {tab:m[1],c0:colNum(m[2]),r0:+m[3]-1,c1:colNum(m[4]),r1:+m[5]-1,a1:m[2]+m[3]+":"+m[4]+m[5]};
+}
+function parseCSV(t){
+  const rows=[];let row=[],f="",q=false;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===","){row.push(f);f=""}
+    else if(ch==="\n"){row.push(f);rows.push(row);row=[];f=""}
+    else if(ch!=="\r")f+=ch;
+  }
+  if(f||row.length){row.push(f);rows.push(row)}
+  return rows;
+}
+// Match the Sheets API: drop empty cells at the end of a row and empty rows at the end of the range.
+function trimGrid(rows){
+  const out=rows.map(r=>{let n=r.length;while(n&&r[n-1]==="")n--;return r.slice(0,n)});
+  while(out.length&&!out[out.length-1].length)out.pop();
+  return out;
+}
+// The sheet's "File → Share → Publish to web" link: serves each whole tab as CSV, exactly as the cells show.
+const PUB_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vRv5y9MKwPtY3td-l9AML2t-iJquWs2Xh1u2e8kzCH22rfN_SMiHqobeHFC9tQ1yJB0UazY5GHxhr6u/pub";
+// Rows between a range's first row and its header row (DM Pipeline starts with a summary line).
+const HEADER_OFFSET={pipeline:1};
+const tabCache={};
+async function getCSV(url){
+  const res=await fetch(url);
+  const text=res.ok?await res.text():"";
+  if(!res.ok||/^\s*</.test(text))throw {code:"not_public"};
+  return parseCSV(text);
+}
+const fetchTab=tab=>getCSV(PUB_URL+"?gid="+GIDS[tab]+"&single=true&output=csv&t="+Date.now());
+// Fallback while a fresh publish spreads across Google's servers: the link-shared query endpoint.
+// It guesses one type per column and blanks cells that don't fit, so it's only used when the published link fails.
+async function fetchRangeFallback(key,r){
+  const off=HEADER_OFFSET[key]||0,start=r.a1.replace(/\d+:/,(r.r0+1+off)+":");
+  const rows=await getCSV("https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&headers=1&gid="+GIDS[r.tab]+"&range="+start+"&t="+Date.now());
+  return Array(off).fill([]).concat(rows);
+}
+async function publicLoad(){
+  for(const k in tabCache)delete tabCache[k];
+  await Promise.all(Object.keys(RANGES).map(async key=>{
+    const r=parseRange(RANGES[key]);
+    try{
+      let rows;
+      try{
+        const grid=await (tabCache[r.tab]=tabCache[r.tab]||fetchTab(r.tab));
+        rows=grid.slice(r.r0,r.r1+1).map(row=>row.slice(r.c0,r.c1+1));
+      }catch(e){rows=await fetchRangeFallback(key,r)}
+      S.raw[key]=trimGrid(rows);S.at[key]=Date.now();S.err[key]=null;
+    }catch(e){if(!S.raw[key])S.err[key]=e&&e.code?e:{code:"not_public"}}
+  }));
+  build();schedule();
+}
+async function refresh(){
+  if(S.pub){toast("Reloading from the Google Sheet…");return publicLoad()}
+  if(!S.mcp)return;
+  try{await S.mcp.invalidate(SERVER,"get_values")}catch(e){}
+  toast("Reloading from the Google Sheet…");
+}
+async function allow(){
+  if(!S.mcp)return;
+  try{
+    const r=await S.mcp.callTool(SERVER,"get_values",{spreadsheetId:SHEET_ID,range:RANGES.pipeline});
+    ingest("pipeline",r);build();
+    try{await S.mcp.invalidate(SERVER,"get_values")}catch(e){}
+  }catch(e){S.err.pipeline=e}
+  render();
+}
+// Funding stage from the sheet (Exa lookup, 29 Oct). Team rule: only DM companies at Series A or later.
+function fundKind(c){
+  const f=String(c["Funding stage"]||"");
+  if(!f)return "";
+  if(/^(series|public|acquired)/i.test(f))return "ok";
+  if(/^(seed|pre-seed)/i.test(f))return "early";
+  return "unknown";
+}
+const FUND_LABEL={ok:"Series A or later",early:"Seed or pre-seed",unknown:"Unknown"};
+const sendable=c=>{const k=fundKind(c);return k!=="early"&&k!=="unknown"};
+const fundPill=c=>{const k=fundKind(c),f=String(c["Funding stage"]||"").split(" · ")[0];
+  return k==="ok"?pill(f,"green"):k==="early"?pill(f+": skip","amber"):k==="unknown"?pill("Funding unknown","line"):null};
+function scoped(){
+  const q=S.q.trim().toLowerCase();
+  return M.contacts.filter(c=>(S.owner==="All"||c.Owner===S.owner)&&(!q||[c.Name,c.Company,c.Role,c.Email,c["X handle"],c.Notes,c.Segment,c["Signal (why now)"]].join(" ").toLowerCase().indexOf(q)>=0));
+}
+function messages(c){
+  const t=M.templates.find(x=>x.ID===c.Template)||{};
+  const fn=firstName(c.Name);
+  const fill=s=>String(s||"").replace(/\[first name\]/gi,fn);
+  return {opener:pick(c,"Opener")||fill(t.Opener),fu1:fill(pick(t,"Follow-up 1")),fu2:fill(pick(t,"Follow-up 2"))};
+}
+
+/* ---------- writes (DM Pipeline only) ---------- */
+function statusCells(c,s){
+  const cells={Status:s};const now=new Date();
+  if(s==="Sent"&&!c["Sent on"])cells["Sent on"]=sheetSerial(now,true);
+  if(s==="FU1 sent"&&!c["FU1 sent"])cells["FU1 sent"]=sheetSerial(now,false);
+  if(s==="FU2 sent"&&!c["FU2 sent"])cells["FU2 sent"]=sheetSerial(now,false);
+  if(s==="Replied"&&!c["Replied on"])cells["Replied on"]=sheetSerial(now,false);
+  return cells;
+}
+function writeError(e){
+  switch(e&&e.code){
+    case "row_moved":return "That person's row moved in the sheet (someone sorted or added rows). The list is reloading; try again in a moment.";
+    case "tool_error":return "Google Sheets refused the save. Check that your Google account can edit the Aktoria sheet.";
+    case "approval_required":case "consent_required":return "This page needs your OK to use Google Sheets. Allow it when claude.ai asks, then try again.";
+    case "not_in_manifest":return "Google Sheets is turned off for this page. Turn it on in the artifact's Permissions menu.";
+    case "needs_reauth":return "Your Google Sheets connection expired. Reconnect it in claude.ai Settings → Connectors.";
+    case "server_not_connected":case "selection_required":return "Add the Google Sheets connector in claude.ai Settings → Connectors, then reload.";
+    case "blocked_by_policy":return "Your organization blocks Google Sheets changes from artifacts.";
+    case "server_unavailable":case "upstream_error":return "Google Sheets didn't confirm the save. Reloading so you can see whether it went through.";
+    default:return "Couldn't save"+(e&&e.code?" ("+e.code+")":"")+". Nothing else was changed.";
+  }
+}
+async function write(c,cells,label){
+  const mcp=S.mcp;
+  if((!mcp&&!S.pub)||S.busy.has(c._key))return false;
+  S.busy.add(c._key);render();
+  let ok=false;
+  if(!mcp){
+    // Public page: the Apps Script checks the row's name and company, then writes only the plain columns.
+    try{
+      const keep={};for(const k of Object.keys(cells))if(WRITABLE.has(k))keep[k]=cells[k];
+      await scriptCall({action:"pipeline",row:c._row,name:c.Name,company:c.Company,cells:keep});
+      S.pipeLocal[c._row]={cells:keep,at:Date.now(),name:c.Name};
+      build();ok=true;toast("Saved to the sheet: "+label);
+    }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+    S.busy.delete(c._key);render();
+    return ok;
+  }
+  try{
+    const ni=M.headers.indexOf("Name"),ci=M.headers.indexOf("Company");
+    if(ni<0||ci<0)throw {code:"row_moved"};
+    const a=Math.min(ni,ci),b=Math.max(ni,ci);
+    const chk=await mcp.callTool(SERVER,"get_values",{spreadsheetId:SHEET_ID,range:PIPE_TAB+"!"+col(a)+c._row+":"+col(b)+c._row},{cache:false});
+    const v=((payloadOf(chk)||{}).values||[])[0]||[];
+    const nm=String(v[ni-a]==null?"":v[ni-a]).trim(),co=String(v[ci-a]==null?"":v[ci-a]).trim();
+    if(nm!==c.Name||co!==c.Company)throw {code:"row_moved"};
+    const ent=Object.keys(cells).filter(k=>WRITABLE.has(k)).map(k=>({k,i:M.headers.indexOf(k),val:cells[k]})).filter(x=>x.i>=0).sort((x,y)=>x.i-y.i);
+    const runs=[];
+    for(const e of ent){const last=runs[runs.length-1];if(last&&e.i===last.end+1){last.end=e.i;last.vals.push(e.val)}else runs.push({start:e.i,end:e.i,vals:[e.val]})}
+    for(const r of runs){
+      await mcp.callTool(SERVER,"update_values",{spreadsheetId:SHEET_ID,range:PIPE_TAB+"!"+col(r.start)+c._row+":"+col(r.end)+c._row,values:[r.vals]},{cache:false});
+    }
+    for(const e of ent)c[e.k]=typeof e.val==="number"?fmtSerial(e.val,e.k==="Sent on"):e.val;
+    if(cells.Status){c._status=cells.Status;c["Next action"]="Updating…"}
+    ok=true;
+    toast("Saved to the sheet: "+label);
+  }catch(e){toast(writeError(e),true)}
+  finally{
+    S.busy.delete(c._key);
+    try{await mcp.invalidate(SERVER,"get_values",{spreadsheetId:SHEET_ID,range:RANGES.pipeline})}catch(e){}
+    render();
+  }
+  return ok;
+}
+const setStatus=(c,s)=>c._status===s?null:write(c,statusCells(c,s),c.Name+" → "+sl(s));
+
+/* ---------- chrome ---------- */
+const PLACEHOLDER={competitors:"Search competitors or their people","their-posts":"Search their posts","our-posts":"Search our posts",photos:"Search posts waiting for media",templates:"Search people"};
+function renderChrome(){
+  const seg=$("#owner-seg");
+  seg.hidden=!OWNER_VIEWS.has(S.view);
+  seg.replaceChildren(...OWNERS.map(o=>h("button",{type:"button","aria-pressed":String(S.owner===o),onclick:()=>{S.owner=o;store.set("owner",o);S.show={};render()}},o==="All"?"Everyone":o)));
+  $("#q").placeholder=PLACEHOLDER[S.view]||"Search people, companies, notes";
+  const list=M.contacts.length?scoped():[];
+  const c=sectionCounts(list);
+  const sec=sectionOf(S.view);
+  const fresh=newPosts().length;
+  const counts={today:c.urgent,send:c.send+c.fu,people:list.length,companies:new Set(list.map(x=>x.Company)).size,replies:c.replies,calls:c.calls,engaged:c.engaged,
+    "our-posts":M.ours.length,numbers:postedOurs().length,"their-posts":M.theirs.length,competitors:M.comps.length,
+    pipeline:list.length,engagers:M.engagers.filter(e=>e.Status!=="Messaged").length};
+  $("#nav").replaceChildren(...SECTIONS.map(s=>h("div",{class:"nav-group",style:"--c:var(--"+s.c+");--cs:var(--"+s.c+"-soft)"},
+    s.id!=="home"?h("div",{class:"nav-h"},h("i"),s.label," ",h("span",null,"· "+s.sub)):null,
+    s.views.map(([id,label])=>{
+      const active=S.view===id||NAV_PARENT[S.view]===id;
+      const alert=(id==="competitors"&&fresh)||(id==="replies"&&c.replies);
+      const n=id==="competitors"&&fresh?fresh+" new":counts[id];
+      return h("a",{href:"#"+id,"aria-current":active?"page":null,onclick:ev=>{ev.preventDefault();menu(false);go(id)}},h("span",null,label),n?h("span",{class:"count"+(alert?" alert":"")},n):null);
+    }))));
+  document.querySelector("main").dataset.sec=sec.c;
+  renderSync();
+}
+function renderSync(){
+  const el=$("#sync");
+  const open=ext(SHEET_URL,"Open sheet","btn ghost sm");
+  if(S.pub){const at=S.at.pipeline;el.replaceChildren(h("span",{class:"small muted"},at?"View only · updated "+new Date(at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"View only"),open);return}
+  if(!S.mcp){el.replaceChildren(open);return}
+  const at=S.at.pipeline,err=S.err.pipeline;
+  const state=err?(S.raw.pipeline?"stale":"err"):at?"ok":"";
+  const text=err&&S.raw.pipeline?"Last updated "+ago(at):at?"Updated "+ago(at):"Connecting…";
+  el.replaceChildren(h("div",{class:"row-l"},h("span",{class:"dot "+state}),h("span",null,text)),
+    h("div",{class:"row-l"},h("button",{class:"btn sm",type:"button",onclick:refresh,title:"Reload every tab from the Google Sheet"},"Refresh"),open));
+}
+function menu(open){
+  $("#sidenav").classList.toggle("open",open);$("#menu-scrim").hidden=!open;$("#menu-btn").setAttribute("aria-expanded",String(open));
+}
+function go(id){
+  id=OLD_HASH[id]||id;
+  if(/^competitor-/.test(id)){S.compSlug=id.slice(11);id="competitor"}
+  if(!VIEWS.some(v=>v[0]===id))id="today";
+  if(id==="competitor"){
+    S.view=id;try{history.replaceState(null,"","#competitor-"+S.compSlug)}catch(e){}
+    render();window.scrollTo(0,0);return;
+  }
+  S.view=id;lastInSection[sectionOf(id).id]=id;
+  try{if(location.hash!=="#"+id)history.replaceState(null,"","#"+id)}catch(e){}
+  render();window.scrollTo(0,0);
+}
+
+/* ---------- connection states ---------- */
+function gate(){
+  if(S.mcp===undefined)return loadingPanel("Connecting to Google Sheets…");
+  if(S.mcp===null&&!S.pub)return h("section",{class:"gate"},
+    h("h2",null,"Open this CRM on claude.ai"),
+    h("p",null,"Aktoria CRM reads the Aktoria Google Sheet live, through your own Google Sheets connector. This view can't reach connectors."),
+    h("ol",null,h("li",null,"Open the artifact link on claude.ai while signed in."),h("li",null,"Connect Google Sheets in Settings → Connectors, using an account that can open the sheet.")),
+    h("div",null,ext(SHEET_URL,"Open the Google Sheet","btn")));
+  if(S.raw.pipeline)return null;
+  const e=S.err.pipeline;
+  if(!e)return loadingPanel("Loading from the Google Sheet…");
+  const code=e.code;
+  let title="Couldn't load the sheet",body="Google Sheets answered with: "+code+".",action=h("button",{class:"btn primary",type:"button",onclick:refresh},"Try again");
+  if(code==="approval_required"||code==="consent_required"||code==="not_in_manifest"){
+    title="Allow Google Sheets for this page";
+    body="The CRM reads the Aktoria sheet with your Google Sheets connector. It only changes Status, the sent and reply dates, the call date and Notes on DM Pipeline.";
+    action=h("button",{class:"btn primary",type:"button",onclick:allow},"Allow and load");
+  }else if(code==="needs_reauth"){title="Reconnect Google Sheets";body="Your Google Sheets connection expired. Reconnect it in claude.ai Settings → Connectors, then reload this page.";action=null}
+  else if(code==="server_not_connected"||code==="selection_required"||code==="server_not_found"){title="Connect Google Sheets";body="Add the Google Sheets connector in claude.ai Settings → Connectors, using a Google account that can open the Aktoria sheet. Then reload this page.";action=null}
+  else if(code==="blocked_by_policy"){title="Google Sheets is blocked";body="Your organization blocks this connector in artifacts. Ask an admin to allow Google Sheets.";action=null}
+  else if(code==="tool_error"){title="Google Sheets refused";body="Your Google account may not have access to the Aktoria sheet. Ask an owner to share it with you, then try again."}
+  else if(code==="not_public"){title="The sheet isn't published yet";body="This public page reads the Aktoria Google Sheet once it's published to the web. In the sheet: File → Share → Publish to web → Entire document → Publish. Then reload this page."}
+  else if(code==="not_granted"||code==="capability_disabled"||code==="capability_removed"){title="Connectors aren't available here";body="Open the artifact directly on claude.ai to load live data.";action=null}
+  return h("section",{class:"gate"},h("h2",null,title),h("p",null,body),h("div",{class:"status-row"},action,ext(SHEET_URL,"Open the Google Sheet","btn")));
+}
+function loadingPanel(text){
+  return h("section",{class:"gate","aria-busy":"true"},h("h2",null,text),h("p",null,"People, posts and competitors appear here as soon as the sheet answers."),
+    h("div",{class:"skel",style:"width:90%"}),h("div",{class:"skel",style:"width:70%"}),h("div",{class:"skel",style:"width:80%"}));
+}
+function staleBanner(){
+  const keys=Object.keys(RANGES).filter(k=>S.err[k]&&(k!=="pipeline"||S.raw.pipeline));
+  if(!keys.length)return null;
+  return h("div",{class:"banner",role:"status"},"Couldn't reload "+keys.map(k=>RANGE_NAMES[k]).join(", ")+" from the sheet. Showing what loaded last.",h("button",{class:"btn sm",type:"button",onclick:refresh},"Try again"));
+}
+function viewHead(title,desc,side){
+  const sec=sectionOf(S.view);
+  return h("div",{class:"head"},h("div",null,sec.id!=="home"?h("div",{class:"eyebrow"},sec.label+" · "+sec.sub):null,h("h1",null,title),desc?h("p",null,desc):null),side||null);
+}
+
+/* ---------- shared pieces ---------- */
+function contactRow(c,actions){
+  return h("div",{class:"row",role:"button",tabindex:"0",onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)},style:S.busy.has(c._key)?"opacity:.5":null},
+    priBadge(c),
+    h("div",{class:"who"},h("div",null,h("b",null,c.Name)," ",h("span",{class:"muted"},"· "+c.Company)),h("div",{class:"sub"},c.Role||"")),
+    h("div",{class:"ctx"},pill(al(c["Next action"]),actionKind(c["Next action"])),c.Channel?h("span",{class:"chip"},c.Channel):null,S.owner==="All"&&c.Owner?h("span",{class:"chip"},c.Owner):null),
+    h("div",{class:"acts",onclick:ev=>ev.stopPropagation()},actions||[]));
+}
+function quickActions(c,bucket){
+  const busy=S.busy.has(c._key)||!canEdit();
+  const m=messages(c);
+  const b=(label,fn,primary)=>h("button",{class:"btn sm"+(primary?" primary":""),type:"button",disabled:busy||null,onclick:ev=>fn(ev.currentTarget)},label);
+  const a=c["Next action"]||"";
+  if(bucket==="send")return [b("Copy first message",el=>copy(m.opener,el)),b("Mark sent",()=>setStatus(c,"Sent"),true)];
+  if(bucket==="fu"){const two=/FU2/.test(a);return [b(two?"Copy follow-up 2":"Copy follow-up 1",el=>copy(two?m.fu2:m.fu1,el)),b("Mark it sent",()=>setStatus(c,two?"FU2 sent":"FU1 sent"),true)]}
+  if(bucket==="noreply")return [b("Mark as no reply",()=>setStatus(c,"No reply"),true)];
+  if(bucket==="reply")return [b("Call booked",()=>setStatus(c,"Call booked"),true)];
+  return [];
+}
+
+/* ---------- Home ---------- */
+const bucket=id=>BUCKETS.find(b=>b.id===id);
+// "28 Oct" style dates in sheet cells -> {tag, t}; follow-ups only count once the sheet says they're due.
+const dayOf=t=>{const m=(t||"").match(/(\d{1,2}) ([A-Z][a-z]{2})/);return m&&MON.indexOf(m[2])>=0?{tag:m[1]+" "+m[2],t:new Date(new Date().getFullYear(),MON.indexOf(m[2]),+m[1]).getTime()}:null};
+const fuWaiting=c=>(c._status==="Sent"||c._status==="FU1 sent")&&!bucket("fu").test(c["Next action"]);
+function firstFuDue(list){
+  const d=list.filter(c=>c._status==="Sent").map(c=>dayOf(c["FU1 due"])).filter(Boolean).sort((a,b)=>a.t-b.t)[0];
+  return d?d.tag:"";
+}
+const noFuYet=list=>{const n=list.filter(c=>c._status==="FU1 sent"||c._status==="FU2 sent").length,due=firstFuDue(list);
+  return n||!due?"":"No follow-ups sent yet. The first ones are due "+due+", 3 days after each first DM."};
+const ENGAGED=new Set(["Inbound engager","Competitor engager"]);
+function sectionCounts(list){
+  const n=id=>list.filter(c=>bucket(id).test(c["Next action"])).length;
+  return {send:list.filter(c=>bucket("send").test(c["Next action"])&&sendable(c)).length,fu:n("fu"),replies:n("reply"),calls:list.filter(c=>c._status==="Call booked").length,
+    engaged:list.filter(c=>ENGAGED.has(c.Segment)).length,urgent:n("reply")+n("fu")+n("call")};
+}
+function viewToday(){
+  const list=scoped();
+  const c=sectionCounts(list);
+  const d=new Date();
+  const first=list.filter(x=>["reply","fu","call"].some(id=>bucket(id).test(x["Next action"]))).sort((a,b)=>{
+    const r=x=>bucket("reply").test(x["Next action"])?0:bucket("fu").test(x["Next action"])?1:2;return r(a)-r(b)||byPri(a,b)});
+  const card=(id,label,sub,figs,cta)=>h("button",{class:"section-card",type:"button",style:"--c:var(--"+({outbound:"out",inbound:"in",midbound:"mid"}[id])+");--cs:var(--"+({outbound:"out",inbound:"in",midbound:"mid"}[id])+"-soft)",onclick:()=>go(cta)},
+    h("div",null,h("div",{class:"eyebrow",style:"margin:0 0 6px"},label),h("h2",null,sub)),
+    h("div",{class:"figs"},figs.map(([v,l])=>h("div",{class:"fig"},h("b",null,v),h("span",null,l)))),
+    h("span",{class:"go"},"Open "+label.toLowerCase()+" →"));
+  const out=[viewHead(d.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"}),(S.owner==="All"?"The whole team":S.owner)+" at a glance. A person sends every DM and post; this page keeps the record."),
+    h("div",{class:"sections"},
+      card("outbound","Outbound","DMs we send",[[c.send,"to send today"],[c.fu,"follow-ups due"]],"send"),
+      card("inbound","Inbound","Replies and calls",[[c.replies,"replies waiting"],[c.calls,"calls booked"]],"replies"),
+      card("midbound","Midbound","Posts that warm buyers up",[[M.ours.length,"posts planned"],[newPosts().length,"new competitor posts"]],"our-posts"))];
+  const fresh=newPosts();
+  if(fresh.length)out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Competitors posted something new",pill(fresh.length+" new","red")),
+    h("p",{class:"sec-hint"},"From the last "+NEW_DAYS+" days, newest first. Open a competitor to see it next to their best posts."),
+    h("div",{class:"list"},fresh.slice(0,shownOf("fresh")).map(p=>h("div",{class:"row",role:"button",tabindex:"0",style:"grid-template-columns:120px minmax(0,1fr) auto",
+      onclick:()=>go("competitor-"+norm(p._comp?p._comp.Name:p.Competitor)),onkeydown:ev=>{if(ev.key==="Enter")go("competitor-"+norm(p._comp?p._comp.Name:p.Competitor))}},
+      h("b",null,p._comp?p._comp.Name:p.Competitor),h("div",{class:"who"},h("div",null,(p.Hook||p["Full text"]||"").split("\n")[0]),h("div",{class:"sub"},p.Account+" · "+p.Platform+" · "+p.Date+" · "+fmtK(p._eng)+" engagement")),
+      h("div",{class:"acts"},pill(p["Post type"],"line")))),moreBtn("fresh",fresh.length))));
+  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Do these first",h("span",{class:"num"},first.length)),
+    h("p",{class:"sec-hint"},"Replies first, then follow-ups that are due, then calls to get ready for."),
+    first.length?h("div",{class:"list"},first.slice(0,shownOf("first")).map(x=>{
+      const id=["reply","fu","call"].find(b=>bucket(b).test(x["Next action"]));
+      return contactRow(x,quickActions(x,id));
+    }),moreBtn("first",first.length)):emptyBox("Nothing urgent","No replies, follow-ups or calls are waiting on "+(S.owner==="All"?"anyone":S.owner)+". "+noFuYet(list))));
+  const asks=founderAsks();
+  if(asks.length)out.push(asksBlock(asks));
+  out.push(pilotBlock());
+  const stats=M.stats.filter(s=>S.owner==="All"||s.Account===S.owner);
+  if(stats.length)out.push(paceBlock(stats));
+  return out;
+}
+/* ---------- pilot goals (agency agreement, section 5) ---------- */
+function pilotBlock(){
+  const now=new Date(),total=Math.round((PILOT.end-PILOT.start)/864e5),done=Math.min(total,Math.max(0,Math.round((now-PILOT.start)/864e5)));
+  const accts=M.accounts.filter(a=>S.owner==="All"||a.Account===S.owner);
+  const last=M.weekly.filter(w=>!/baseline/i.test(w.Week)).slice(-1)[0];
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"X pilot goals",h("span",{class:"num"},"day "+done+" of "+total+" · ends "+PILOT.end.getDate()+" "+MON[PILOT.end.getMonth()])),
+    h("p",{class:"sec-hint"},"From the signed agreement with Acquire Your User: 1,000+ followers per account, more qualified inbound inquiries and booked calls."),
+    h("div",{class:"pace"},accts.map(a=>{
+      const now_=num(a["Followers now"]),start=num(a["Followers at start"]),tgt=num(a["Follower target"])||PILOT.followerTarget;
+      return h("div",{class:"pace-card"},
+        h("div",{class:"pace-top"},h("b",null,a.Account+" "+(a.Handle||"")),h("span",{class:"num"},(now_!=null?fmtK(now_):"–")+" of "+fmtK(tgt))),
+        h("div",{class:"meter",role:"img","aria-label":(now_||0)+" of "+tgt+" followers"},h("i",{style:"width:"+(now_?Math.min(100,now_/tgt*100):0)+"%"})),
+        h("div",{class:"stats"},h("span",null,start!=null&&now_!=null?(now_-start>=0?"+":"")+fmtK(now_-start)+" since start":"Start count not in yet"),a["Checked on"]?h("span",null,"checked "+fmtDay(a["Checked on"])):null));
+    }),h("div",{class:"pace-card"},h("div",{class:"pace-top"},h("b",null,"Inbound this week"),h("span",{class:"num"},last?(last["Qualified inbound inquiries"]||"–")+" inquiries":"–")),
+      h("div",{class:"stats"},h("span",null,"target 5 to 10 a week"),last&&last["Calls booked from inbound"]?h("span",null,last["Calls booked from inbound"]+" calls booked"):null),
+      h("p",{class:"small muted",style:"margin:0"},"Type weekly counts on the Our Accounts tab."))));
+}
+/* ---------- questions and approvals for the founders ---------- */
+function founderAsks(){
+  return M.ours.filter(p=>p["Founder question"]&&!/posted/i.test(p.Status||"")).map(p=>({p,later:/^later/i.test(p.Date||"")||/^later/i.test(p.Status||"")}))
+    .sort((a,b)=>a.later-b.later);
+}
+function asksBlock(asks){
+  const text=asks.filter(a=>!a.later).map((a,i)=>(i+1)+". "+a.p.Account+" · "+(a.p["Time (IST)"]||"")+" IST · "+a.p["Post type"]+": "+a.p["Founder question"]).join("\n");
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Waiting on Karan or Shreenabh",pill(asks.filter(a=>!a.later).length+" for today","amber")),
+    h("p",{class:"sec-hint"},"Blanks to fill and approvals the agreement requires (funding, hiring, data products, YC). A yes on WhatsApp counts as approval."),
+    h("div",{class:"list"},asks.slice(0,shownOf("asks")).map(a=>h("div",{class:"row",role:"button",tabindex:"0",style:"grid-template-columns:110px minmax(0,1fr) auto",
+      onclick:()=>{S.compareKey=a.p._key;renderCompare(true)},onkeydown:ev=>{if(ev.key==="Enter"){S.compareKey=a.p._key;renderCompare(true)}}},
+      h("b",null,a.p.Account),h("div",{class:"who"},h("div",{style:"white-space:normal"},a.p["Founder question"]),h("div",{class:"sub"},(a.later?"Later · ":"Today "+(a.p["Time (IST)"]||"")+" IST · ")+(a.p["Post type"]||"")+" copied from "+(a.p.Competitor||""))),
+      h("div",{class:"acts"},pill(a.later?"Later":"Today",a.later?"line":"amber")))),moreBtn("asks",asks.length)),
+    text?h("div",null,h("button",{class:"btn primary sm",type:"button",onclick:ev=>copy("Questions for today's posts:\n"+text,ev.currentTarget)},"Copy today's questions for WhatsApp")):null);
+}
+/* ---------- best competitor posts to copy next ---------- */
+// Biggest posts we haven't copied yet: X by views (100K+ first), then LinkedIn by engagement, at most 3 per account.
+// Hiring and funding posts are left out (not pilot priorities).
+const SKIP_COPY=/\b(we('re| are) hiring|join (our|the) team|open roles?|raised|funding|seed round|series [a-c]|pre-seed|backed by)\b/i;
+function copyNext(limit){
+  const copied=new Set(M.ours.map(o=>linkKey(o["Their link"])));
+  const per=new Map(),out=[];
+  const list=M.theirs.filter(t=>!copied.has(linkKey(t.Link))&&t._eng!=null&&t["Post type"]!=="Hiring"&&!SKIP_COPY.test(t["Full text"]||""))
+    .sort((a,b)=>(a._li?1:0)-(b._li?1:0)||viewsOf(b)-viewsOf(a)||b._eng-a._eng);
+  for(const t of list){const k=t._comp?t._comp.Name:t.Competitor;if((per.get(k)||0)>=3)continue;per.set(k,(per.get(k)||0)+1);out.push(t);if(out.length>=limit)break}
+  return out;
+}
+function copyNextBlock(){
+  const list=copyNext(10);
+  if(!list.length)return null;
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"10 best posts to copy next",h("span",{class:"num"},list.length)),
+    h("p",{class:"sec-hint"},"The biggest posts in the space we haven't copied yet, by views (100K+ first; at most 3 per account, no hiring or funding posts). The nightly drafter works down this same list."),
+    h("div",{class:"list"},list.map((t,i)=>h("div",{class:"row",style:"grid-template-columns:34px 130px minmax(0,1fr) auto;cursor:default"},
+      h("b",{class:"num"},"#"+(i+1)),
+      h("b",null,t._comp?t._comp.Name:t.Competitor),
+      h("div",{class:"who"},h("div",{style:"white-space:normal"},(t.Hook||t["Full text"]||"").split("\n")[0].slice(0,160)),
+        h("div",{class:"sub"},t.Platform+" · "+(t.Date||"")+" · "+fmtK(t._eng)+" engagement"+(t.Views?" · "+fmtK(num(t.Views))+" views":"")+(t._rank?" · #"+t._rank.all+" of "+t._rank.allN+" on "+t.Platform:""))),
+      h("div",{class:"acts"},pill(t["Post type"],"ink"),h("button",{class:"btn sm",type:"button",onclick:ev=>copy(t["Full text"],ev.currentTarget)},"Copy original"),ext(t.Link,"Open"))))));
+}
+function paceBlock(stats){
+  return h("div",{class:"sec-wrap"},h("h2",{class:"sec"},"DMs sent today"),h("div",{class:"pace"},stats.map(s=>{
+    const tgt=num(s["Daily target"])||0,sent=num(s["Sent today"])||0;
+    return h("div",{class:"pace-card"},
+      h("div",{class:"pace-top"},h("b",null,s.Account),h("span",{class:"num"},sent+" of "+tgt+" sent")),
+      h("div",{class:"meter",role:"img","aria-label":sent+" of "+tgt+" sent today"},h("i",{style:"width:"+(tgt?Math.min(100,sent/tgt*100):0)+"%"})),
+      h("div",{class:"stats"},
+        h("span",null,h("span",{class:"num"},s["Ready to send"]||"0")," ready"),
+        h("span",null,h("span",{class:"num"},s["Follow-ups due"]||"0")," follow-ups"),
+        h("span",null,h("span",{class:"num"},s["Replies waiting"]||"0")," replies"),
+        h("span",null,"reply rate ",h("span",{class:"num"},s["Reply rate"]||"–"))));
+  })));
+}
+/* ---------- Inbound ---------- */
+function contactList(key,items,actionsFor,emptyTitle,emptyText){
+  return items.length?h("div",{class:"list"},items.slice(0,shownOf(key)).map(c=>contactRow(c,actionsFor?actionsFor(c):[])),moreBtn(key,items.length)):emptyBox(emptyTitle,emptyText);
+}
+function inboundActions(c){
+  const busy=S.busy.has(c._key)||!canEdit();
+  return (NEXT_STEPS[c._status]||[]).map(([s,l],i)=>h("button",{class:"btn sm"+(i===0?" primary":""),type:"button",disabled:busy||null,onclick:()=>setStatus(c,s)},l));
+}
+function viewReplies(){
+  const items=scoped().filter(c=>c._status==="Replied"||c["Next action"]==="Reply now").sort(byPri);
+  return [viewHead("Replies","People who wrote back. Answer them first, then book the call."),
+    contactList("replies",items,inboundActions,"No replies waiting","When someone replies, set their stage to Replied and they show up here.")];
+}
+function viewCalls(){
+  const list=scoped();
+  const booked=list.filter(c=>c._status==="Call booked").sort(byPri),cust=list.filter(c=>c._status==="Customer").sort(byPri);
+  return [viewHead("Calls","Calls we've booked, and the people who became customers."),
+    h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Calls booked",h("span",{class:"num"},booked.length)),contactList("calls",booked,inboundActions,"No calls booked yet","Mark someone Call booked and pick the date in their panel.")),
+    h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Customers",h("span",{class:"num"},cust.length)),contactList("customers",cust,null,"No customers yet",""))];
+}
+function viewEngaged(){
+  const items=scoped().filter(c=>ENGAGED.has(c.Segment)).sort(byPri);
+  return [viewHead("Engaged with our posts","People who liked, replied to or reposted our posts or a competitor's. They're warm, so DM them within a day."),
+    contactList("engaged",items,c=>quickActions(c,"send"),"No one here yet","People who engage with our posts are added after each post goes live. Reading replies and reposts needs the post scrape.")];
+}
+/* ---------- Outbound: send today ---------- */
+function viewSend(){
+  const list=scoped();
+  const d=new Date();
+  const out=[viewHead("Send today","Who to message today, most important first. Copy the message, send it yourself, then mark it sent.")];
+  // Latest day with X DM results ("Sent 28 Oct ..." / "Not sent on X (28 Oct)"), so the record stays up after midnight.
+  const dayTag=(list.filter(c=>/^(sent|not sent)/i.test(c["DM result"]||"")).map(c=>dayOf(c["DM result"])).filter(Boolean).sort((a,b)=>b.t-a.t)[0]||{}).tag||"";
+  const sentToday=list.filter(c=>(c["DM result"]||"").indexOf("Sent "+dayTag)===0);
+  const notSent=list.filter(c=>/^not sent/i.test(c["DM result"]||"")&&(c["DM result"]||"").indexOf(dayTag)>=0);
+  if(dayTag&&(sentToday.length||notSent.length)){
+    const by=a=>sentToday.filter(c=>c.Owner===a).length;
+    out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"X DMs, "+dayTag,h("span",{class:"num"},sentToday.length+" sent · "+notSent.length+" couldn't send")),
+      h("p",{class:"sec-hint"},["Shreenabh","Aktoria","Karan"].filter(a=>by(a)).map(a=>a+" "+by(a)+" of 30").join(" · ")+". Open anyone to see what they'd most likely buy. "+noFuYet(list)),
+      h("div",{class:"list"},sentToday.slice(0,shownOf("dmsent")).map(c=>h("div",{class:"row",role:"button",tabindex:"0",style:"grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) auto",onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)}},
+        h("div",{class:"who"},h("div",null,h("b",null,c.Name)," ",h("span",{class:"muted"},"· "+c.Company)),h("div",{class:"sub"},c["DM result"])),
+        h("div",{class:"ctx",style:"white-space:normal"},c["Likely to buy"]||""),h("div",{class:"acts"},pill("Sent","green")))),moreBtn("dmsent",sentToday.length)),
+      notSent.length?[h("h2",{class:"sec",style:"margin-top:8px"},"Couldn't send",h("span",{class:"num"},notSent.length)),
+        h("div",{class:"list"},notSent.slice(0,shownOf("dmnot")).map(c=>h("div",{class:"row",role:"button",tabindex:"0",style:"grid-template-columns:minmax(0,1.2fr) minmax(0,1.6fr) auto",onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)}},
+          h("div",{class:"who"},h("div",null,h("b",null,c.Name)," ",h("span",{class:"muted"},"· "+c.Company)),h("div",{class:"sub"},c["X handle"]||"")),
+          h("div",{class:"ctx",style:"white-space:normal"},"Their X DMs need a passcode, so the message couldn't be sent. Moved to LinkedIn."),h("div",{class:"acts"},pill("Not sent","amber")))),moreBtn("dmnot",notSent.length))]:null));
+  }
+  // New first messages only go to Series A+ companies; follow-ups and the rest are unaffected.
+  const groups=BUCKETS.filter(b=>["fu","send","noreply","research"].indexOf(b.id)>=0).map(b=>({b,items:list.filter(c=>b.test(c["Next action"])&&(b.id!=="send"||sendable(c))).sort(byPri)}));
+  const held=list.filter(c=>bucket("send").test(c["Next action"])&&!sendable(c)).length;
+  if(held)out.push(h("p",{class:"note"},held+" people in the send list are hidden because their company is seed, pre-seed or its funding is unknown. We only DM Series A and later."));
+  const queued=list.filter(c=>c["Next action"]==="Queued").length;
+  out.push(h("div",{class:"kpis"},
+    groups.filter(g=>g.b.id!=="noreply").map(g=>h("button",{class:"kpi",type:"button",onclick:()=>{const el=document.getElementById("b-"+g.b.id);if(el)el.scrollIntoView({behavior:"smooth",block:"start"})}},
+      h("span",{class:"lbl"},h("span",{class:"dot "+g.b.kind}),g.b.label),h("span",{class:"n"},g.items.length))),
+    h("button",{class:"kpi",type:"button",onclick:()=>{S.f={status:"",segment:"",channel:"",action:"Queued",company:""};go("people")}},h("span",{class:"lbl"},h("span",{class:"dot"}),"Queued for later"),h("span",{class:"n"},queued))));
+  const stats=M.stats.filter(s=>S.owner==="All"||s.Account===S.owner);
+  if(stats.length)out.push(paceBlock(stats));
+  for(const g of groups){
+    if(!g.items.length)continue;
+    const key="today:"+g.b.id;
+    out.push(h("section",{class:"sec-wrap",id:"b-"+g.b.id},
+      h("h2",{class:"sec"},g.b.label,h("span",{class:"num"},g.items.length)),
+      g.b.hint?h("p",{class:"sec-hint"},g.b.hint):null,
+      h("div",{class:"list"},g.items.slice(0,shownOf(key)).map(c=>contactRow(c,quickActions(c,g.b.id))),moreBtn(key,g.items.length))));
+  }
+  if(groups.every(g=>!g.items.length))out.push(emptyBox(S.q?"No one matches that search.":"All clear",S.q?"":"Nothing is due for "+(S.owner==="All"?"anyone":S.owner)+" right now."));
+  return out;
+}
+
+/* ---------- Pipeline ---------- */
+function viewPipeline(){
+  const list=scoped().sort(byPri);
+  const all=STAGES.concat(["Closed"]);
+  const by={};all.forEach(k=>by[k]=[]);
+  for(const c of list){const s=CLOSED.has(c._status)?"Closed":STAGES.indexOf(c._status)>=0?c._status:"To send";by[s].push(c)}
+  // Follow-up columns stay hidden until someone actually gets a follow-up.
+  const cols=all.filter(k=>!/^FU[12] sent$/.test(k)||by[k].length);
+  const canDrag=canEdit();
+  return [
+    viewHead("Pipeline","Where every conversation stands. "+(canDrag?"Drag a card to change its stage; marking Sent records the time so follow-up dates fill in. ":"")+noFuYet(list)),
+    h("div",{class:"board",id:"board"},cols.map(k=>{
+      const items=by[k],key="board:"+k,shown=shownOf(key),drop=k!=="Closed"&&canDrag;
+      return h("section",{class:"col","aria-label":sl(k),
+        ondragover:drop?ev=>{ev.preventDefault();ev.currentTarget.classList.add("over")}:null,
+        ondragleave:drop?ev=>ev.currentTarget.classList.remove("over"):null,
+        ondrop:drop?ev=>{ev.preventDefault();ev.currentTarget.classList.remove("over");const k2=ev.dataTransfer.getData("text/plain");const c=M.contacts.find(x=>x._key===k2);if(c)setStatus(c,k)}:null},
+        h("div",{class:"col-h"},h("span",null,sl(k)),h("span",{class:"num muted"},items.length)),
+        h("div",{class:"cards"},items.slice(0,shown).map(c=>h("article",{class:"card"+(S.busy.has(c._key)?" busy":""),draggable:canDrag?"true":null,tabindex:"0",
+            ondragstart:ev=>{ev.dataTransfer.setData("text/plain",c._key);ev.dataTransfer.effectAllowed="move"},
+            onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)}},
+          h("div",{class:"card-top"},h("div",{class:"who"},h("div",null,h("b",null,c.Name)),h("div",{class:"sub"},c.Company+(c.Role?" · "+c.Role:""))),priBadge(c)),
+          h("div",{class:"card-meta"},pill(al(c["Next action"]),actionKind(c["Next action"])),k==="Closed"?pill(sl(c._status)):null,S.owner==="All"&&c.Owner?h("span",{class:"chip"},c.Owner):null))),
+          items.length>shown?h("button",{class:"btn sm",type:"button",onclick:()=>{S.show[key]=shown+20;render()}},"Show "+Math.min(20,items.length-shown)+" more"):null,
+          !items.length?h("div",{class:"empty small"},"No one here"):null));
+    }))];
+}
+
+/* ---------- People ---------- */
+function uniq(arr){return Array.from(new Set(arr.filter(Boolean))).sort()}
+function viewPeople(){
+  let list=scoped();
+  const f=S.f;
+  const sel=(id,label,key,opts,labeler)=>h("select",{class:"sel",id,"aria-label":label,value:f[key],onchange:ev=>{S.f[key]=ev.target.value;S.show.people=0;render()}},
+    h("option",{value:""},label+": all"),opts.map(o=>h("option",{value:o},labeler?labeler(o):o)));
+  const filters=h("div",{class:"filters"},
+    sel("f-status","Stage","status",uniq(M.contacts.map(c=>c._status)),sl),
+    sel("f-action","Next step","action",uniq(M.contacts.map(c=>c["Next action"])),al),
+    sel("f-segment","Type","segment",uniq(M.contacts.map(c=>c.Segment)),segl),
+    sel("f-channel","Channel","channel",uniq(M.contacts.map(c=>c.Channel))),
+    sel("f-fund","Funding","fund",["ok","early","unknown"],k=>FUND_LABEL[k]),
+    f.company?h("span",{class:"pill line"},"Company: "+f.company,h("button",{class:"btn ghost sm",type:"button","aria-label":"Clear company",onclick:()=>{S.f.company="";render()}},"✕")):null,
+    (f.status||f.action||f.segment||f.channel||f.company||f.fund)?h("button",{class:"btn ghost sm",type:"button",onclick:()=>{S.f={status:"",segment:"",channel:"",action:"",company:"",fund:""};render()}},"Clear filters"):null);
+  list=list.filter(c=>(!f.status||c._status===f.status)&&(!f.action||c["Next action"]===f.action)&&(!f.segment||c.Segment===f.segment)&&(!f.channel||c.Channel===f.channel)&&(!f.company||c.Company===f.company)&&(!f.fund||fundKind(c)===f.fund));
+  const sk=S.sort.key,dir=S.sort.dir;
+  list.sort((a,b)=>{
+    if(sk==="Priority")return dir*((a._pri==null?-99:a._pri)-(b._pri==null?-99:b._pri))||byPri(a,b);
+    if(sk==="Fit")return dir*((a._fit||0)-(b._fit||0))||byPri(a,b);
+    if(sk==="Status")return dir*(STATUSES.indexOf(a._status)-STATUSES.indexOf(b._status))||byPri(a,b);
+    return dir*String(a[sk]||"").localeCompare(String(b[sk]||""))||byPri(a,b);
+  });
+  const th=(label,key)=>h("th",{scope:"col","aria-sort":key&&sk===key?(dir>0?"ascending":"descending"):null},key?h("button",{type:"button",onclick:()=>{S.sort=sk===key?{key,dir:-dir}:{key,dir:key==="Priority"||key==="Fit"?-1:1};render()}},label+(sk===key?(dir>0?" ↑":" ↓"):"")):label);
+  const shown=shownOf("people");
+  return [
+    viewHead("People","Everyone we're reaching out to, most important first.",h("span",{class:"num muted"},list.length+" of "+M.contacts.length)),
+    filters,
+    h("div",{class:"tbl-wrap"},h("table",null,
+      h("thead",null,h("tr",null,th("Priority","Priority"),th("Name","Name"),th("Company","Company"),th("Funding","Funding stage"),th("Owner","Owner"),th("Channel",null),th("Stage","Status"),th("Next step",null),th("Fit","Fit"),th("Likely to buy",null))),
+      h("tbody",null,list.slice(0,shown).map(c=>h("tr",{class:"click",tabindex:"0",onclick:()=>openContact(c),onkeydown:ev=>{if(ev.key==="Enter")openContact(c)},style:S.busy.has(c._key)?"opacity:.5":null},
+        h("td",null,priBadge(c)),
+        h("td",null,h("b",null,c.Name),h("div",{class:"small muted"},c.Role||"")),
+        h("td",null,c.Company),h("td",null,fundPill(c)||h("span",{class:"small muted"},"–")),h("td",null,c.Owner||"–"),h("td",null,c.Channel||"–"),
+        h("td",null,pill(sl(c._status),statusKind(c._status))),
+        h("td",null,pill(al(c["Next action"]),actionKind(c["Next action"]))),
+        h("td",{class:"num"},c["Fit (1-10)"]||"–"),
+        h("td",{class:"wrap-text small"},c["Likely to buy"]||(c["DM result"]&&/^not sent/i.test(c["DM result"])?h("span",{class:"muted"},"Not sent: DMs need a passcode"):h("span",{class:"muted"},plain(c["Signal (why now)"])))))),
+        !list.length?h("tr",null,h("td",{colspan:"10",class:"empty"},"No one matches these filters.")):null))),
+    moreBtn("people",list.length,true)];
+}
+
+/* ---------- Companies ---------- */
+function viewCompanies(){
+  const list=scoped();
+  const map=new Map();
+  for(const c of list){
+    const k=c.Company||"–";
+    if(!map.has(k))map.set(k,{name:k,contacts:[],owners:new Set()});
+    const a=map.get(k);a.contacts.push(c);if(c.Owner)a.owners.add(c.Owner);
+  }
+  const tmap=new Map(M.targets.map(t=>[norm(t.Company),t]));
+  const accts=Array.from(map.values()).map(a=>{
+    const stages=a.contacts.map(c=>STAGES.indexOf(c._status)).filter(i=>i>=0);
+    a.stage=stages.length?Math.max.apply(null,stages):-1;
+    a.label=a.stage>=0?STAGES[a.stage]:"Closed";
+    a.top=Math.max.apply(null,a.contacts.map(c=>c._pri==null?-99:c._pri));
+    a.target=tmap.get(norm(a.name));
+    return a;
+  }).sort((x,y)=>(y.stage-x.stage)||(y.top-x.top)||x.name.localeCompare(y.name));
+  const used=new Set(accts.map(a=>norm(a.name)));
+  const untouched=(S.owner==="All"&&!S.q)?M.targets.filter(t=>!used.has(norm(t.Company))):[];
+  const open=a=>{S.f={status:"",segment:"",channel:"",action:"",company:a.name};go("people")};
+  const out=[viewHead("Companies","Which companies we're talking to, furthest along first. Click one to see its people.",h("span",{class:"num muted"},accts.length+" companies"))];
+  out.push(h("div",{class:"tbl-wrap"},h("table",null,
+    h("thead",null,h("tr",null,["Company","People","Furthest stage","Owners","Top priority","On our target list","Next step"].map(t=>h("th",{scope:"col"},t)))),
+    h("tbody",null,accts.slice(0,shownOf("companies")).map(a=>h("tr",{class:"click",tabindex:"0",onclick:()=>open(a),onkeydown:ev=>{if(ev.key==="Enter")open(a)}},
+      h("td",null,h("b",null,a.name)),
+      h("td",{class:"num"},a.contacts.length),
+      h("td",null,pill(sl(a.label),a.stage>=0?statusKind(a.label):"")),
+      h("td",null,Array.from(a.owners).join(", ")||"–"),
+      h("td",null,a.top>-99?h("span",{class:"pri "+(a.top>=10?"p-hi":a.top>=7?"p-mid":"")},Math.round(a.top)):"–"),
+      h("td",null,a.target?[a.target.Tier,a.target.Priority].filter(Boolean).join(" · "):h("span",{class:"muted"},"No")),
+      h("td",{class:"wrap-text small"},a.target?a.target["Next step"]||"":"")))),
+    !accts.length?h("tbody",null,h("tr",null,h("td",{colspan:"7",class:"empty"},"No companies match."))):null)),
+    moreBtn("companies",accts.length,true));
+  if(untouched.length)out.push(h("section",{class:"sec-wrap"},
+    h("h2",{class:"sec"},"Target companies with no one in the pipeline yet",h("span",{class:"num"},untouched.length)),
+    h("p",{class:"sec-hint"},"From the Target Accounts tab. Find people at these companies and add them to DM Pipeline."),
+    h("div",{class:"tbl-wrap"},h("table",null,
+      h("thead",null,h("tr",null,["Company","Kind","Priority","Who to reach","Why we fit","Next step"].map(t=>h("th",{scope:"col"},t)))),
+      h("tbody",null,untouched.slice(0,shownOf("untouched")).map(t=>h("tr",null,
+        h("td",null,h("b",null,t.Company),t.Segment?h("div",{class:"small muted"},t.Segment):null),
+        h("td",null,t.Tier||"–"),
+        h("td",null,pill(t.Priority,/high/i.test(t.Priority||"")?"ink":"")),
+        h("td",{class:"small"},t["Titles to reach"]||""),
+        h("td",{class:"wrap-text small"},t["Why Aktoria fits"]||""),
+        h("td",{class:"wrap-text small"},t["Next step"]||"")))))),
+    moreBtn("untouched",untouched.length,true)));
+  return out;
+}
+
+/* ---------- Competitors ---------- */
+function postsOf(c){return M.theirs.filter(p=>p._comp===c)}
+function lastScrape(){const d=M.theirs.map(p=>p["Scraped on"]).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s||"")).sort().pop();return d?fmtDay(d):""}
+function fmtDay(iso){const d=parseDate(iso);return d?d.getDate()+" "+MON[d.getMonth()]:iso}
+function inThisMonth(d){const n=new Date();return d&&d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()}
+function viewCompetitors(){
+  if(!S.raw.comps&&!S.err.comps)return [viewHead("Competitors","Loading the Competitors tab…")];
+  if(!M.comps.length)return [viewHead("Competitors","Who sells robot companies what we sell."),emptyBox("No competitors yet","Add them on the Competitors tab of the sheet.")];
+  const groups=uniq(M.comps.map(c=>c["How close"]));
+  const order=["Same thing as us","Overlaps on data","Overlaps on software"];
+  groups.sort((a,b)=>(order.indexOf(a)+99)%99-(order.indexOf(b)+99)%99);
+  const q=S.q.trim().toLowerCase();
+  let list=M.comps.filter(c=>(!S.close||c["How close"]===S.close));
+  if(q)list=list.filter(c=>(Object.values(c).join(" ")+" "+M.people.filter(p=>compFor(p.Competitor)===c).map(p=>p.Name+" "+p.X).join(" ")).toLowerCase().indexOf(q)>=0);
+  list.sort((a,b)=>((order.indexOf(a["How close"])+99)%99)-((order.indexOf(b["How close"])+99)%99));
+  const hasNumbers=M.comps.some(c=>c["X followers"]||c["LinkedIn followers"]||c["Posts per month"]);
+  const out=[viewHead("Competitors","The "+M.comps.length+" companies that sell robot companies what we sell: remote operators, teleop software or real robot data."),
+    h("div",{class:"filters"},h("div",{class:"seg",role:"group","aria-label":"How close to us"},
+      [["","All "+M.comps.length]].concat(groups.map(g=>[g,g+" · "+M.comps.filter(c=>c["How close"]===g).length])).map(([v,l])=>h("button",{type:"button","aria-pressed":String(S.close===v),onclick:()=>{S.close=v;S.show.comps=0;render()}},l)))),
+    h("p",{class:"note"},hasNumbers?"Followers, posts per month and new posts refresh automatically every other day"+(lastScrape()?" · last refresh "+lastScrape():"")+".":"Follower counts and how often they post fill in after the first post scrape.")];
+  out.push(list.length?h("div",{class:"grid"},list.slice(0,shownOf("comps")).map(compCard)):emptyBox("No competitors match"));
+  out.push(moreBtn("comps",list.length,true));
+  return out;
+}
+function compCard(c){
+  const people=M.people.filter(p=>compFor(p.Competitor)===c);
+  const posts=postsOf(c);
+  const month=posts.filter(p=>inThisMonth(p._date));
+  const figs=[["X followers",c["X followers"]],["LinkedIn followers",c["LinkedIn followers"]],["Posts a month",c["Posts per month"]],["Loudest on",c["Loudest on"]],["Best post type this month",c["Best post type this month"]]].filter(x=>x[1]);
+  const fresh=posts.filter(isNew).length;
+  const slug=norm(c.Name);
+  return h("article",{class:"panel post clickable",tabindex:"0",onclick:ev=>{if(!ev.target.closest("a,button"))go("competitor-"+slug)},onkeydown:ev=>{if(ev.key==="Enter"&&ev.target===ev.currentTarget)go("competitor-"+slug)}},
+    fresh?h("div",null,pill(fresh+" new post"+(fresh===1?"":"s")+" since your last visit","red")):null,
+    h("div",{class:"panel-top"},
+      h("div",{style:"min-width:0"},h("h3",null,c.Name),c.Website?h("a",{class:"small muted",href:safeUrl(c.Website),target:"_blank",rel:"noopener"},host(safeUrl(c.Website)||c.Website)):null),
+      pill(c["How close"],closeKind(c["How close"]))),
+    h("p",{class:"lead"},c["What they sell"]),
+    c.Sells?h("div",{class:"chips"},c.Sells.split(/,\s*/).map(s=>h("span",{class:"chip"},s))):null,
+    figs.length?h("div",{class:"figs"},figs.map(([l,v])=>h("div",{class:"fig"},h("b",null,/^\d[\d,.]*$/.test(v)?fmtK(num(v)):v),h("span",null,l)))):null,
+    people.length?h("div",{class:"d-sec"},h("span",{class:"lbl"},"Who runs it"),h("ul",{class:"ppl"},people.map(p=>h("li",null,
+      h("span",null,p.Name),h("span",{class:"muted"},p.Role),
+      xUrl(p.X)?h("a",{href:xUrl(p.X),target:"_blank",rel:"noopener"},p.X):null,
+      safeUrl(p.LinkedIn)?h("a",{href:safeUrl(p.LinkedIn),target:"_blank",rel:"noopener"},"LinkedIn"):null)))):null,
+    h("div",{class:"links"},
+      xUrl(c["X account"])?h("a",{class:"btn sm",href:xUrl(c["X account"]),target:"_blank",rel:"noopener"},c["X account"]+" ↗"):null,
+      ext(c["LinkedIn page"],"LinkedIn"),ext(c["Proof link"],"Proof of what they sell"),
+      h("button",{class:"btn sm primary",type:"button",onclick:()=>go("competitor-"+slug)},"Open dashboard"+(posts.length?" · "+posts.length+" posts":"")+(month.length?" · "+month.length+" this month":"")+" →")),
+    topPostBox(posts),
+    c.Notes?h("p",{class:"small muted",style:"margin:0"},c.Notes):null);
+}
+function topPostBox(posts){
+  const best=posts.slice().sort((a,b)=>(a._li-b._li)||((b._eng||0)-(a._eng||0)))[0];
+  if(!best)return h("p",{class:"small muted",style:"margin:0"},"No posts saved yet.");
+  return h("div",{class:"msg"},
+    h("div",{class:"msg-h"},h("span",{class:"lbl"},"Top post · "+best.Platform+" · "+(best.Date||"")),pill(best["Post type"],"line")),
+    h("p",{style:"font-weight:500"},(best.Hook||best["Full text"]||"").split("\n")[0].slice(0,180)),
+    h("div",{class:"stats"},best._li?[h("span",null,h("span",{class:"num"},fmtK(num(best.Reactions)))," reactions"),h("span",null,h("span",{class:"num"},fmtK(num(best.Comments)))," comments")]
+      :[h("span",null,h("span",{class:"num"},fmtK(num(best.Views)))," views"),h("span",null,h("span",{class:"num"},fmtK(best._eng))," engagement")]));
+}
+
+/* ---------- Their posts ---------- */
+const TIME_OPTS=[["all","All time"],["90","Last 90 days"],["month","This month"]];
+function inTime(p,t){
+  if(t==="all")return true;
+  if(!p._date)return false;
+  if(t==="month")return inThisMonth(p._date);
+  return (Date.now()-p._date.getTime())<=90*864e5;
+}
+function viewTheirPosts(){
+  const tp=S.tp,q=S.q.trim().toLowerCase();
+  const base=M.theirs.filter(p=>(!tp.comp||(p._comp?p._comp.Name:p.Competitor)===tp.comp)&&(!tp.platform||(tp.platform==="LinkedIn")===p._li)&&(!tp.type||p["Post type"]===tp.type||p["Second type"]===tp.type)
+    &&(!q||[p.Competitor,p.Account,p["Full text"],p.Hook,p["Why it worked"]].join(" ").toLowerCase().indexOf(q)>=0));
+  let time=tp.time,fellBack=false;
+  let list=base.filter(p=>inTime(p,time));
+  if(!list.length&&!tp.timeTouched&&base.length){fellBack=true;time="all";list=base}
+  const key=tp.sort==="views"?(p=>p._views==null?-1:p._views):(p=>p._eng==null?-1:p._eng);
+  list.sort((a,b)=>(a._li-b._li)||(key(b)-key(a)));
+  const countBy=n=>M.theirs.filter(p=>(p._comp?p._comp.Name:p.Competitor)===n).length;
+  const compNames=uniq(M.comps.map(c=>c.Name).concat(M.theirs.map(p=>p._comp?p._comp.Name:p.Competitor))).sort((a,b)=>countBy(b)-countBy(a)||a.localeCompare(b));
+  const types=uniq(M.theirs.map(p=>p["Post type"]).concat(M.theirs.map(p=>p["Second type"])));
+  const set=(k,v)=>{S.tp[k]=v;if(k==="time")S.tp.timeTouched=true;S.show.theirs=0;render()};
+  const out=[viewHead("Their posts","Each competitor's all-time best posts, ranked by engagement. X first, then LinkedIn."),
+    h("div",{class:"filters"},
+      h("select",{class:"sel",id:"tp-comp","aria-label":"Competitor",value:tp.comp,onchange:ev=>set("comp",ev.target.value)},h("option",{value:""},"All "+M.comps.length+" competitors"),compNames.map(n=>h("option",{value:n},n+" ("+countBy(n)+")"))),
+      h("div",{class:"seg",role:"group","aria-label":"Platform"},[["","X and LinkedIn"],["X","X"],["LinkedIn","LinkedIn"]].map(([v,l])=>h("button",{type:"button","aria-pressed":String(tp.platform===v),onclick:()=>set("platform",v)},l))),
+      h("select",{class:"sel",id:"tp-type","aria-label":"Post type",value:tp.type,onchange:ev=>set("type",ev.target.value)},h("option",{value:""},"Every post type"),types.map(t=>h("option",{value:t},t))),
+      h("div",{class:"seg",role:"group","aria-label":"When"},TIME_OPTS.map(([v,l])=>h("button",{type:"button","aria-pressed":String(time===v),onclick:()=>set("time",v)},l))),
+      h("select",{class:"sel",id:"tp-sort","aria-label":"Sort by",value:tp.sort,onchange:ev=>{S.tp.sort=ev.target.value;render()}},h("option",{value:"eng"},"Sort: engagement"),h("option",{value:"views"},"Sort: views")))];
+  if(!tp.comp&&!q){const w=workingPanel();if(w)out.push(w)}
+  if(fellBack)out.push(h("p",{class:"note"},"Nothing saved for that time yet, so this shows every saved post."));
+  if(tp.comp&&!base.length&&M.theirs.length)out.push(emptyBox("No saved posts from "+tp.comp+" yet",(M.comps.find(c=>c.Name===tp.comp)||{})["X account"]?"Their posts arrive with the next scrape.":"They have no company X account, so their posts come from their founders' accounts and LinkedIn."));
+  if(!M.theirs.length)out.push(emptyBox(S.raw.theirs?"No competitor posts saved yet":"Loading competitor posts…",S.raw.theirs?"They arrive with the first post scrape.":""));
+  else if(!list.length&&!(tp.comp&&!base.length))out.push(emptyBox("No posts match these filters"));
+  else{
+    out.push(h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},list.slice(0,shownOf("theirs")).map(postCard)));
+    out.push(moreBtn("theirs",list.length,true));
+  }
+  return out;
+}
+function postCard(p){
+  const full=p["Full text"]||"",hook=p.Hook||full.split("\n")[0];
+  const rest=full&&full.trim()!==hook.trim()?full:"";
+  const open=S.expanded.has(p._key);
+  const figs=p._li?[["Reactions",p.Reactions],["Comments",p.Comments],["Reposts",p.Reposts],["Per 1K followers",p["Per 1K followers"]]]
+    :[["Views",p.Views],["Likes",p.Likes],["Replies",p.Replies],["Reposts",p.Reposts],["Quotes",p.Quotes],["Bookmarks",p.Bookmarks],["Per 1K views",p["Per 1K views"]]];
+  const early=/earlier research/i.test(p["Scraped on"]||"");
+  const copies=copiesOf(p);
+  return h("article",{class:"post"},
+    h("div",{class:"post-meta"},p._comp?h("a",{href:"#competitor-"+norm(p._comp.Name),onclick:ev=>{ev.preventDefault();go("competitor-"+norm(p._comp.Name))},style:"font-weight:600;color:var(--ink)"},p._comp.Name):h("b",null,p.Competitor),h("span",null,p.Account+(p["Account role"]?" ("+p["Account role"]+")":"")),h("span",{class:"chip"},p.Platform||"–"),h("span",null,p.Date||""),isNew(p)?pill("New","red"):null,
+      h("span",{style:"margin-left:auto;display:flex;gap:5px;flex-wrap:wrap"},pill(p["Post type"],"ink"),pill(p["Second type"],"line"))),
+    (p._rank||copies.length)?h("div",{class:"chips"},rankPills(p),copies.map(o=>h("button",{class:"btn sm primary",type:"button",onclick:()=>{S.compareKey=o._key;renderCompare(true)}},"Our copy by "+o.Account+" · compare side by side"))):null,
+    h("p",{class:"hook"},hook),
+    rest?h("p",{class:"body"},rest):null,
+    p.Skeleton?h("div",null,h("span",{class:"lbl"},"Its shape"),h("div",{class:"shape"},p.Skeleton)):null,
+    p["Why it worked"]?h("p",{style:"margin:0"},h("span",{class:"lbl"},"Why it worked  "),p["Why it worked"]):null,
+    h("div",{class:"figs"},h("div",{class:"fig"},h("b",null,fmtK(p._eng)),h("span",null,"Engagement")),figs.filter(x=>x[1]!==""&&x[1]!=null).map(([l,v])=>h("div",{class:"fig"},h("b",null,fmtK(num(v))),h("span",null,l)))),
+    p.Tags?h("p",{class:"small",style:"margin:0"},h("span",{class:"lbl"},"Tagged  "),p.Tags):null,
+    p.Media?h("p",{class:"small",style:"margin:0"},h("span",{class:"lbl"},"Media  "),[p.Media,p["What the media is"],p["How sure"]?"("+p["How sure"]+")":""].filter(Boolean).join(" · ")):null,
+    h("div",{class:"links"},ext(p.Link,"Open the original"),early?h("span",{class:"small muted"},"From earlier research. The full wording comes with the next scrape."):null));
+}
+
+/* ---------- Our posts ---------- */
+// Where a planned post stands: posted (has its link), scheduled, parked for later, or still to post.
+function postStage(p){
+  if(safeUrl(p["Posted link"]))return "posted";
+  if(/^scheduled/i.test(p.Status||""))return "scheduled";
+  if(/^later/i.test(p.Date||"")||/^later/i.test(p.Status||""))return "later";
+  return "topost";
+}
+const POST_TABS=[["topost","To post"],["scheduled","Scheduled"],["posted","Posted"],["later","Later"]];
+const POST_TAB_HINT={
+  topost:"Drafted and waiting to go out, earliest first. Schedule it in X, then press Mark as scheduled; or press Mark as posted with its link once it's live.",
+  scheduled:"Scheduled in X but not live yet. Once it goes out, press Mark as posted and paste its link so the Post tracker follows it.",
+  posted:"Live on X, newest first. Numbers are checked every 3 hours; open one to compare it with the original.",
+  later:"Parked: needs founder approval, swapped for a bigger original, or kept for another day. Still in the sheet.",
+};
+function viewOurPosts(){
+  const q=S.q.trim().toLowerCase();
+  const own=a=>S.owner==="All"||a===S.owner;
+  const op=S.op;
+  if(!POST_TABS.some(t=>t[0]===op.when))op.when="topost";
+  const all=M.ours.filter(p=>own(p.Account)&&(!q||[p["Our version"],p["Their post"],p.Competitor].join(" ").toLowerCase().indexOf(q)>=0));
+  const when=p=>(p._date?p._date.getTime():9e15)+minutesOf(p["Time (IST)"])*6e4;
+  const inTab=all.filter(p=>postStage(p)===op.when&&(!op.type||p["Post type"]===op.type)&&(!op.aim||p["Aimed at"]===op.aim))
+    .sort(op.when==="posted"?(a,b)=>when(b)-when(a):(a,b)=>when(a)-when(b));
+  const drafts=M.drafts.filter(d=>own(d._account)&&(!q||[d.Post,d["Inspired by"]].join(" ").toLowerCase().indexOf(q)>=0));
+  const setOp=(k,v)=>{S.op[k]=v;S.show.ours=0;render()};
+  const count=t=>all.filter(p=>postStage(p)===t).length;
+  const out=[viewHead("Our posts","What each account is posting, copied line for line from competitors' biggest posts with our facts swapped in; [blank] marks a fact we still need. Posts move from To post to Scheduled to Posted as you mark them.")];
+  out.push(h("div",{class:"filters"},
+    h("div",{class:"seg",role:"group","aria-label":"Which posts"},POST_TABS.map(([v,l])=>h("button",{type:"button","aria-pressed":String(op.when===v),onclick:()=>setOp("when",v)},l+" ("+count(v)+")"))),
+    h("select",{class:"sel",id:"op-type","aria-label":"Post type",value:op.type,onchange:ev=>setOp("type",ev.target.value)},h("option",{value:""},"Every post type"),uniq(all.map(p=>p["Post type"])).map(t=>h("option",{value:t},t))),
+    h("select",{class:"sel",id:"op-aim","aria-label":"Aimed at",value:op.aim,onchange:ev=>setOp("aim",ev.target.value)},h("option",{value:""},"Aimed at anyone"),uniq(all.map(p=>p["Aimed at"])).map(t=>h("option",{value:t},t)))));
+  const label=POST_TABS.find(t=>t[0]===op.when)[1];
+  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},label,h("span",{class:"num"},inTab.length)),h("p",{class:"sec-hint"},POST_TAB_HINT[op.when]),
+    inTab.length?[h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},inTab.slice(0,shownOf("ours")).map(ourCard)),moreBtn("ours",inTab.length,true)]
+      :emptyBox(S.raw.ours?"Nothing here":"Loading posts…",S.raw.ours?(op.when==="topost"?"Every drafted post is scheduled or posted. New drafts arrive every night: 5 per account.":""):"")));
+  if(op.when==="topost"){const nx=copyNextBlock();if(nx)out.push(nx)}
+  if(drafts.length)out.push(h("p",{class:"note"},"The "+drafts.length+" older drafts (inspired by accounts outside the 20 competitors) are kept on the Karan, Shreenabh and Aktoria Posts tabs of the sheet and hidden here."));
+  return out;
+}
+function minutesOf(t){const m=String(t||"").match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);if(!m)return 0;let hr=+m[1]%12;if(!m[3]&&+m[1]>=12)hr=+m[1];if(m[3]&&/pm/i.test(m[3]))hr+=12;
+  // Slots after midnight belong to the same evening's run.
+  if(hr<6)hr+=24;return hr*60+ +m[2]}
+const linkKey=u=>String(u||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/^(www\.|mobile\.)/,"").replace(/^twitter\.com/,"x.com").replace(/[?#].*$/,"").replace(/\/+$/,"");
+function originalFor(p){const k=linkKey(p["Their link"]);return k?M.theirs.find(t=>linkKey(t.Link)===k)||null:null}
+function copiesOf(t){const k=linkKey(t.Link);return k?M.ours.filter(p=>linkKey(p["Their link"])===k):[]}
+const rate=(eng,views)=>eng!=null&&views?Math.round(eng/views*10000)/10:null;
+function ourEng(p){const v=[p.Likes,p.Replies,p.Reposts,p.Quotes,p.Bookmarks].map(num).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0):null}
+function rankPills(t){
+  if(!t||!t._rank)return [];
+  const r=t._rank;
+  return [pill("#"+r.comp+" of "+r.compN+" "+(t._comp?t._comp.Name:t.Competitor)+" posts on "+(t._li?"LinkedIn":"X"),"ink"),pill("#"+r.all+" of "+r.allN+" across all competitors","line")];
+}
+function figRow(list){
+  const f=list.filter(x=>x[1]!=null&&x[1]!=="");
+  return f.length?h("div",{class:"figs"},f.map(([l,v])=>h("div",{class:"fig"},h("b",null,fmtK(typeof v==="number"?v:num(v))),h("span",null,l)))):null;
+}
+function theirFigs(t){
+  const views=num(t.Views);
+  return t._li?[["Impressions",t.Views],["Engagement",t._eng],["Reactions",t.Reactions],["Comments",t.Comments],["Reposts",t.Reposts]]
+    :[["Views",t.Views],["Engagement",t._eng],["Likes",t.Likes],["Replies",t.Replies],["Reposts",t.Reposts],["Bookmarks",t.Bookmarks],["Per 1K views",rate(t._eng,views)]];
+}
+function statusKindOf(st){return /founder/i.test(st)?"amber":/posted/i.test(st)?"green":/ready/i.test(st)?"blue":"line"}
+function compareEl(p){
+  const t=originalFor(p);
+  const compName=(t&&t._comp?t._comp.Name:null)||(t&&t.Competitor)||p.Competitor||"Competitor";
+  const theirText=(t&&t["Full text"])||p["Their post"]||"";
+  const theirViews=t?num(t.Views):null,theirEng=t?t._eng:null;
+  const ourViews=num(p.Views),oe=ourEng(p);
+  const st=p.Status||"Draft";
+  const changes=String(p["What we changed"]||"").split(/\n|;\s*/).map(s=>s.trim()).filter(Boolean);
+  const folder=FOLDERS.find(f=>p["Drive folder"]&&(p["Drive folder"].indexOf(f.id)>=0||norm(p["Drive folder"]).indexOf(norm(f.name))>=0));
+  const left=h("section",{class:"side","aria-label":"Their post"},
+    h("div",{class:"side-h"},h("span",{class:"lbl"},"Their post · the original"),
+      h("div",{class:"side-who"},h("b",null,compName),t?h("span",{class:"muted"},t.Account+(t["Account role"]?" ("+t["Account role"]+")":"")):null,h("span",{class:"chip"},(t&&t.Platform)||p.Platform||"X"),t&&t.Date?h("span",{class:"muted"},t.Date):null)),
+    t?h("div",{class:"chips"},rankPills(t),pill(t["Post type"],"line")):h("p",{class:"small muted",style:"margin:0"},"This original isn't saved in Their posts yet, so its numbers and rank aren't available."),
+    t?figRow(theirFigs(t)):null,
+    h("div",{class:"side-text"},theirText||"–"),
+    h("div",{class:"links"},ext((t&&t.Link)||p["Their link"],"Open the original")));
+  const right=h("section",{class:"side ours","aria-label":"Our version"},
+    h("div",{class:"side-h"},h("span",{class:"lbl"},"Our version"),
+      h("div",{class:"side-who"},h("b",null,p.Account||"–"),h("span",{class:"muted"},[p.Date,p["Time (IST)"]?p["Time (IST)"]+" IST":""].filter(Boolean).join(", ")),h("span",{class:"chip"},p.Platform||"X"))),
+    h("div",{class:"chips"},pill(st,statusKindOf(st)),pill(p["Post type"],"line"),p.Result?pill(p.Result,/beat/i.test(p.Result)?"green":/flop/i.test(p.Result)?"red":"line"):null),
+    (ourViews!=null||oe!=null)?figRow([["Views",ourViews],["Engagement",oe],["Likes",p.Likes],["Replies",p.Replies],["Reposts",p.Reposts],["Bookmarks",p.Bookmarks],["Per 1K views",rate(oe,ourViews)]])
+      :h("p",{class:"small muted",style:"margin:0"},"Our numbers show up here once it's posted."),
+    h("div",{class:"side-text"},p["Our version"]||"–"),
+    h("div",{class:"links"},h("button",{class:"btn sm",type:"button",onclick:ev=>copy(p["Our version"],ev.currentTarget)},"Copy our version"),postControl(p)));
+  let verdict=null;
+  if(theirViews&&ourViews){
+    const rt=rate(theirEng,theirViews),ro=rate(oe,ourViews);
+    verdict=h("p",{class:"verdict"},"Theirs got "+fmtK(theirViews)+" views, ours got "+fmtK(ourViews)+"."+(rt!=null&&ro!=null?" Engagement per 1K views: theirs "+rt+", ours "+ro+".":""));
+  }
+  return [h("div",{class:"compare"},left,right),verdict,
+    changes.length?h("div",{class:"swaps"},h("span",{class:"lbl"},"What we changed"),changes.map(c=>h("span",{class:"chip"},c))):null,
+    p["Founder question"]?h("div",{class:"banner"},h("b",null,"Needs a founder answer: "),p["Founder question"]):null,
+    (p["Media needed"]||folder)?h("div",{class:"links"},h("span",{class:"lbl",style:"align-self:center"},"Media: "+(p["Media needed"]||"")),
+      p["Media file"]?pill("Media ready","green"):null,folder?h("a",{class:"btn sm",href:folderUrl(folder.id),target:"_blank",rel:"noopener"},"Open "+folder.name+" ↗"):null):null];
+}
+function ourCard(p){
+  const t=originalFor(p);
+  const compName=(t&&t._comp?t._comp.Name:null)||p.Competitor||"a competitor";
+  const openIt=()=>{S.compareKey=p._key;renderCompare(true)};
+  return h("article",{class:"post clickable",tabindex:"0",title:"Open the full comparison",
+      onclick:ev=>{if(!ev.target.closest("a,button,input"))openIt()},onkeydown:ev=>{if(ev.key==="Enter"&&ev.target===ev.currentTarget)openIt()}},
+    h("div",{class:"post-meta"},h("b",null,p.Account+"'s version of "+compName),h("span",null,[p.Date,p["Time (IST)"]?p["Time (IST)"]+" IST":""].filter(Boolean).join(", ")),
+      pill(p["Post type"],"ink"),p["Aimed at"]?pill("For "+p["Aimed at"].toLowerCase(),"blue"):null,/\[blank\]/i.test(p["Our version"]||"")?pill("Has [blank]s to fill","amber"):null,
+      h("span",{style:"margin-left:auto"},h("button",{class:"btn sm",type:"button",onclick:()=>{S.compareKey=p._key;renderCompare(true)}},"Open full screen"))),
+    compareEl(p));
+}
+function renderCompare(force){
+  const host=$("#modal-host");
+  const p=S.compareKey?M.ours.find(x=>x._key===S.compareKey):null;
+  if(!p){host.replaceChildren();if(!S.openKey)document.body.classList.remove("locked");return}
+  if(!force&&host.firstChild){document.body.classList.add("locked");return}
+  document.body.classList.add("locked");
+  const close=()=>{S.compareKey=null;renderCompare(true)};
+  host.replaceChildren(h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Their post and ours, side by side"},
+    h("div",{class:"scrim",onclick:close}),
+    h("div",{class:"modal-box"},
+      h("div",{class:"d-head"},h("div",null,h("h2",null,"Side by side"),h("p",null,p.Account+" · "+([p.Date,p["Time (IST)"]?p["Time (IST)"]+" IST":""].filter(Boolean).join(", ")||"no date yet"))),
+        h("button",{class:"btn",type:"button",id:"m-close",onclick:close},"Close")),
+      compareEl(p))));
+  if(force){const b=$("#m-close");if(b)b.focus()}
+}
+function draftCard(d){
+  const origin=draftOrigin(d);
+  const open=S.expanded.has(d._key);
+  const long=(d.Post||"").split("\n").length>6||(d.Post||"").length>420;
+  return h("article",{class:"post"},
+    h("div",{class:"post-meta"},h("b",null,d._account),h("span",null,[d.ID,d.Date,d["Time (PT)"]?d["Time (PT)"]+" PT":""].filter(Boolean).join(" · ")),
+      h("span",{style:"margin-left:auto;display:flex;gap:5px;flex-wrap:wrap"},pill(plain(d.Category),"line"),
+        origin==="old"?pill("Old style","amber"):origin==="instagram"?pill("From Karan's Instagram","blue"):null,pill(d.Status))),
+    h("p",{class:"body"+(open||!long?"":" clamp"),style:"color:var(--ink)"},d.Post),
+    long?h("div",null,h("button",{class:"btn ghost sm",type:"button",onclick:()=>{open?S.expanded.delete(d._key):S.expanded.add(d._key);render()}},open?"Show less":"Show the whole post")):null,
+    d["Inspired by"]?h("p",{class:"small muted",style:"margin:0"},"Inspired by: "+d["Inspired by"]):null);
+}
+
+/* ---------- new-post alerts (remembered per viewer) ---------- */
+const NEW_DAYS=3;
+const seenMap=()=>store.get("seen",{});
+function markSeen(name){const m=seenMap();m[norm(name)]=Date.now();store.set("seen",m)}
+function isNew(p){
+  if(!p._date)return false;
+  const name=p._comp?p._comp.Name:p.Competitor;
+  const since=Math.max(Date.now()-NEW_DAYS*864e5,seenMap()[norm(name)]||0);
+  return p._date.getTime()+864e5>since&&Date.now()-p._date.getTime()<NEW_DAYS*864e5;
+}
+const newPosts=()=>M.theirs.filter(isNew).sort((a,b)=>b._date-a._date);
+const postedOurs=()=>M.ours.filter(p=>safeUrl(p["Posted link"]));
+
+/* ---------- mark posted / mark messaged (claude.ai: the Sheets connector; public page: the sheet's Apps Script) ---------- */
+function ourPostLink(raw,account){
+  const m=String(raw||"").trim().match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
+  const hd=HANDLES[account];
+  return m&&hd&&m[1].toLowerCase()===hd.toLowerCase()?"https://x.com/"+hd+"/status/"+m[2]:null;
+}
+// The team passcode is asked once and kept in this browser; without it the public page stays view only.
+function teamPass(){
+  let p=store.get("pass","");
+  if(!p){p=(window.prompt("Team passcode to save changes (ask Reyansh). You only enter it once on this browser.")||"").trim();if(p)store.set("pass",p)}
+  return p;
+}
+async function scriptCall(body){
+  const pass=teamPass();
+  if(!pass)throw new Error("No passcode entered, so nothing was saved");
+  // A plain-text body keeps this a "simple" request, so the browser doesn't need a CORS preflight.
+  const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(Object.assign({token:PAGE_TOKEN,pass},body))});
+  const text=await res.text();
+  if(/^bad pass/.test(text)){store.set("pass","");throw new Error("Wrong team passcode. Try again and it will ask for it")}
+  if(!/^ok/.test(text))throw new Error(text||"The sheet didn't answer");
+}
+const canEdit=()=>!!S.mcp||!!S.pub;
+const putCells=(range,values)=>S.mcp.callTool(SERVER,"update_values",{spreadsheetId:SHEET_ID,range,values},{cache:false});
+const rerenderModal=()=>{if(S.compareKey)renderCompare(true)};
+async function savePosted(p,raw){
+  const link=ourPostLink(raw,p.Account);
+  if(!link){toast("That isn't a post from @"+(HANDLES[p.Account]||"?")+". Paste the link of the post itself (x.com/…/status/…).",true);return}
+  S.busy.add(p._key);render();rerenderModal();
+  try{
+    if(S.mcp){await putCells("'Our Posts'!O"+p._row,[["Posted"]]);await putCells("'Our Posts'!Q"+p._row,[[link]])}
+    else await scriptCall({action:"posted",row:p._row,link});
+    S.postedLocal[p._row]=link;S.postForm=null;S.postDraft="";build();
+    toast("Marked as posted. Views, likes and replies show up in the Post tracker within 3 hours.");
+  }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+  S.busy.delete(p._key);render();rerenderModal();
+}
+async function saveMessaged(e){
+  const when=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+  S.busy.add(e._key);render();
+  try{
+    if(S.mcp)await putCells("'Post Engagers'!P"+e._row+":Q"+e._row,[["Messaged",when]]);
+    else await scriptCall({action:"messaged",row:e._row,handle:e.Handle});
+    S.messagedLocal[e._row]=when;build();toast("Marked "+(e.Name||e.Handle)+" as messaged.");
+  }catch(err){toast("Couldn't save: "+(err&&err.message||err),true)}
+  S.busy.delete(e._key);render();
+}
+async function saveScheduled(p,on){
+  const status=on?"Scheduled":"Ready to post";
+  S.busy.add(p._key);render();rerenderModal();
+  try{
+    if(S.mcp)await putCells("'Our Posts'!O"+p._row,[[status]]);
+    else await scriptCall({action:"scheduled",row:p._row,on:!!on});
+    S.statusLocal[p._row]={status,at:Date.now()};build();
+    toast(on?"Moved to Scheduled. Add its link there once it's live.":"Moved back to To post.");
+  }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+  S.busy.delete(p._key);render();rerenderModal();
+}
+function postControl(p){
+  if(safeUrl(p["Posted link"]))return [pill("Posted","green"),ext(p["Posted link"],"Open our post")];
+  const busy=S.busy.has(p._key),sched=postStage(p)==="scheduled";
+  const openForm=()=>{S.postForm=p._key;S.postDraft="";render();rerenderModal()};
+  if(S.postForm!==p._key)return sched?[pill("Scheduled","blue"),h("button",{class:"btn primary sm",type:"button",onclick:openForm},"It's live: add the link"),
+      h("button",{class:"btn ghost sm",type:"button",disabled:busy||null,onclick:()=>saveScheduled(p,false)},"Unschedule")]
+    :[h("button",{class:"btn sm",type:"button",disabled:busy||null,onclick:()=>saveScheduled(p,true)},busy?"Saving…":"Mark as scheduled"),
+      h("button",{class:"btn primary sm",type:"button",onclick:openForm},"Mark as posted")];
+  const inp=h("input",{type:"url",value:S.postDraft||"",placeholder:"Paste the link of "+p.Account+"'s post on X","aria-label":"Link to the post on X",autocomplete:"off",
+    oninput:ev=>{S.postDraft=ev.target.value},onkeydown:ev=>{if(ev.key==="Enter")savePosted(p,ev.target.value);if(ev.key==="Escape"){S.postForm=null;render();rerenderModal()}}});
+  if(!/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName||""))setTimeout(()=>inp.isConnected&&inp.focus(),0);
+  return h("div",{class:"post-form"},inp,
+    h("button",{class:"btn primary sm",type:"button",disabled:busy||null,onclick:()=>savePosted(p,inp.value)},busy?"Saving…":"Save"),
+    h("button",{class:"btn ghost sm",type:"button",onclick:()=>{S.postForm=null;render();rerenderModal()}},"Cancel"));
+}
+function median(a){a=a.filter(x=>x!=null).sort((x,y)=>x-y);if(!a.length)return null;const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2}
+
+/* ---------- what's working ---------- */
+function typeStats(posts){
+  const by=new Map();
+  for(const p of posts){const t=p["Post type"];if(!t||p._eng==null)continue;if(!by.has(t))by.set(t,[]);by.get(t).push(p._eng)}
+  return Array.from(by,([type,v])=>({type,n:v.length,med:median(v)})).filter(x=>x.n>=2).sort((a,b)=>b.med-a.med);
+}
+function barList(rows,label){
+  const max=Math.max.apply(null,rows.map(r=>r.med).concat([1]));
+  return h("div",{class:"bars"},rows.map(r=>h("div",{class:"bar-row"},
+    h("span",{class:"bar-l"},r.type),h("span",{class:"bar-t"},h("i",{style:"width:"+Math.max(3,r.med/max*100)+"%"})),h("span",{class:"bar-v num"},fmtK(r.med)+" "+label+" · "+r.n+" posts"))));
+}
+function workingPanel(){
+  const x=M.theirs.filter(p=>!p._li);
+  const stats=typeStats(x);
+  const done=M.ours.filter(p=>p.Result);
+  const out=[];
+  if(done.length){
+    const by=new Map();
+    for(const p of done){const k=(p["Post type"]||"Post")+" copied from "+(p.Competitor||"a competitor");if(!by.has(k))by.set(k,{beat:0,n:0});const v=by.get(k);v.n++;if(/beat/i.test(p.Result))v.beat++}
+    const lines=Array.from(by,([k,v])=>({k,...v})).sort((a,b)=>b.beat/b.n-a.beat/a.n||b.n-a.n).slice(0,4);
+    out.push(h("div",{class:"d-sec"},h("span",{class:"lbl"},"Our copies, 7 days after posting"),
+      lines.map(l=>h("p",{style:"margin:0"},l.k+" beat the original "+l.beat+" of "+l.n+" times."+(l.beat/l.n>=.5?" Doing more of these next week.":" Doing fewer next week.")))));
+  }
+  if(stats.length)out.push(h("div",{class:"d-sec"},h("span",{class:"lbl"},"What gets the most engagement for competitors on X (median per post)"),barList(stats.slice(0,6),"")));
+  if(!out.length)return null;
+  return h("section",{class:"panel"},h("h3",null,"What's working"),out,
+    h("p",{class:"small muted",style:"margin:0"},"Next week's plan leans toward the post types at the top. Updates itself as new posts and results come in."));
+}
+
+/* ---------- one competitor ---------- */
+function viewCompetitor(){
+  const c=M.comps.find(x=>norm(x.Name)===S.compSlug);
+  if(!c)return [viewHead("Competitor",M.comps.length?"No competitor with that name. Pick one from Competitors.":"Loading…")];
+  const posts=postsOf(c);
+  const top=posts.slice().sort((a,b)=>(a._li-b._li)||(viewsOf(b)-viewsOf(a))||((b._eng||0)-(a._eng||0)));
+  const latest=posts.filter(p=>p._date).sort((a,b)=>b._date-a._date);
+  const fresh=posts.filter(isNew);
+  const people=M.people.filter(p=>compFor(p.Competitor)===c);
+  const last30=posts.filter(p=>p._date&&Date.now()-p._date.getTime()<30*864e5).length;
+  const medX=median(posts.filter(p=>!p._li).map(p=>p._eng)),medLi=median(posts.filter(p=>p._li).map(p=>p._eng));
+  const best=typeStats(posts)[0];
+  const copies=M.ours.filter(o=>norm(o.Competitor)===norm(c.Name)||(originalFor(o)&&originalFor(o)._comp===c));
+  setTimeout(()=>markSeen(c.Name),0);
+  const tile=(v,l)=>h("div",{class:"kpi",style:"cursor:default"},h("span",{class:"lbl"},l),h("span",{class:"n"},v==null||v===""?"–":v));
+  return [
+    h("div",null,h("button",{class:"btn ghost sm",type:"button",onclick:()=>go("competitors")},"← All competitors")),
+    viewHead(c.Name,c["What they sell"],h("div",{class:"chips"},pill(c["How close"],closeKind(c["How close"])),c.Sells?c.Sells.split(/,\s*/).map(s=>h("span",{class:"chip"},s)):null)),
+    h("div",{class:"links"},ext(c.Website,host(safeUrl(c.Website)||"")),xUrl(c["X account"])?h("a",{class:"btn sm",href:xUrl(c["X account"]),target:"_blank",rel:"noopener"},c["X account"]+" ↗"):null,ext(c["LinkedIn page"],"LinkedIn"),ext(c["Proof link"],"Proof of what they sell")),
+    h("div",{class:"kpis"},tile(c["X followers"]?fmtK(num(c["X followers"])):null,"X followers"),tile(c["LinkedIn followers"]?fmtK(num(c["LinkedIn followers"])):null,"LinkedIn followers"),
+      tile(posts.length,"Posts saved"),tile(last30,"Posted in the last 30 days"),tile(medX!=null?fmtK(medX):(medLi!=null?fmtK(medLi):null),medX!=null?"Typical engagement on X":"Typical engagement on LinkedIn"),tile(best?best.type:null,"Their best post type")),
+    copyGraph(c,posts),
+    fresh.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"New since your last visit",h("span",{class:"num"},fresh.length)),
+      h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},fresh.map(postCard))):null,
+    h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Their best posts of all time",h("span",{class:"num"},top.length)),
+      h("p",{class:"sec-hint"},"Ranked by views (X first, then LinkedIn by engagement). These are the posts we copy."),
+      top.length?[h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},top.slice(0,shownOf("ctop")).map(postCard)),moreBtn("ctop",top.length,true)]
+        :emptyBox("No posts saved yet",c["X account"]?"They arrive with the next scrape.":"No company X account, so posts come from their founders and LinkedIn.")),
+    latest.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Latest posts"),h("div",{class:"list"},latest.slice(0,shownOf("clatest")).map(p=>h("div",{class:"row",style:"grid-template-columns:90px minmax(0,1fr) auto;cursor:default"},
+      h("span",{class:"num small muted"},p.Date),h("div",{class:"who"},h("div",null,(p.Hook||p["Full text"]||"").split("\n")[0]),h("div",{class:"sub"},p.Account+" · "+(p.Platform||"")+" · "+fmtK(p._eng)+" engagement")),
+      h("div",{class:"acts"},isNew(p)?pill("New","red"):null,ext(p.Link,"Open")))),moreBtn("clatest",latest.length))):null,
+    people.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Who runs it"),h("div",{class:"panel"},h("ul",{class:"ppl"},people.map(p=>h("li",null,h("b",null,p.Name),h("span",{class:"muted"},p.Role),
+      xUrl(p.X)?h("a",{href:xUrl(p.X),target:"_blank",rel:"noopener"},p.X):null,safeUrl(p.LinkedIn)?h("a",{href:safeUrl(p.LinkedIn),target:"_blank",rel:"noopener"},"LinkedIn"):null))))):null,
+    copies.length?h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Our copies of their posts",h("span",{class:"num"},copies.length)),
+      h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},copies.slice(0,shownOf("ccopies")).map(ourCard)),moreBtn("ccopies",copies.length,true)):null,
+    c.Notes?h("p",{class:"note"},c.Notes):null];
+}
+
+/* ---------- live numbers ---------- */
+/* ---------- tabs inside a section (one nav item, several views) ---------- */
+// Pipeline holds the board, people, companies and DM templates; Our posts holds photos; Competitors holds all their posts.
+const SUB_TABS={
+  pipeline:[["pipeline","Board"],["people","People"],["companies","Companies"],["templates","DM templates"]],
+  "our-posts":[["our-posts","Posts"],["photos","Photos"]],
+  competitors:[["competitors","Competitors"],["their-posts","All their posts"]],
+};
+const NAV_PARENT={people:"pipeline",companies:"pipeline",templates:"pipeline",photos:"our-posts","their-posts":"competitors",competitor:"competitors",engaged:"engagers"};
+function subTabs(){
+  const parent=NAV_PARENT[S.view]||S.view,tabs=SUB_TABS[parent];
+  if(!tabs)return null;
+  return h("nav",{class:"subtabs","aria-label":"Views"},tabs.map(([id,label])=>h("a",{href:"#"+id,"aria-current":S.view===id?"page":null,onclick:ev=>{ev.preventDefault();go(id)}},label)));
+}
+
+/* ---------- content calendar ---------- */
+const DAY=864e5;
+function weekStart(offset){const d=new Date();d.setHours(0,0,0,0);const dow=(d.getDay()+6)%7;return new Date(d.getTime()-dow*DAY+offset*7*DAY)}
+const sameDay=(a,b)=>a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+const STAGE_PILL={posted:["Posted","green"],scheduled:["Scheduled","blue"],topost:["To post","line"]};
+function viewCalendar(){
+  const accts=Object.keys(HANDLES).filter(a=>S.owner==="All"||a===S.owner);
+  const start=weekStart(S.calWeek||0),days=Array.from({length:7},(_,i)=>new Date(start.getTime()+i*DAY));
+  const today=new Date();
+  const posts=M.ours.filter(p=>p._date&&postStage(p)!=="later");
+  const cell=(a,d)=>posts.filter(p=>p.Account===a&&sameDay(p._date,d)).sort((x,y)=>minutesOf(x["Time (IST)"])-minutesOf(y["Time (IST)"]));
+  const fmt=d=>d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+  const total=posts.filter(p=>p._date>=start&&p._date<new Date(start.getTime()+7*DAY)&&accts.indexOf(p.Account)>=0);
+  const by=k=>total.filter(p=>postStage(p)===k).length;
+  return [
+    viewHead("Calendar","What each account posts each day: posted, scheduled, or still to post. The target is 5 a day per account. Open a post to see it next to the original.",
+      h("div",{class:"seg",role:"group","aria-label":"Week"},h("button",{type:"button",onclick:()=>{S.calWeek=(S.calWeek||0)-1;render()}},"← Last week"),
+        h("button",{type:"button","aria-pressed":String(!S.calWeek),onclick:()=>{S.calWeek=0;render()}},"This week"),h("button",{type:"button",onclick:()=>{S.calWeek=(S.calWeek||0)+1;render()}},"Next week →"))),
+    h("div",{class:"chips"},pill(by("posted")+" posted","green"),pill(by("scheduled")+" scheduled","blue"),pill(by("topost")+" to post","line"),
+      h("span",{class:"small muted"},fmt(days[0])+" to "+fmt(days[6]))),
+    h("div",{class:"tbl-wrap"},h("table",{class:"cal"},
+      h("thead",null,h("tr",null,h("th",{scope:"col"},"Account"),days.map(d=>h("th",{scope:"col",class:sameDay(d,today)?"today":null},fmt(d))))),
+      h("tbody",null,accts.map(a=>h("tr",null,h("th",{scope:"row"},a,h("div",{class:"small muted"},"@"+HANDLES[a])),
+        days.map(d=>{const list=cell(a,d);
+          return h("td",{class:sameDay(d,today)?"today":null},list.length?list.map(p=>{const [l,k]=STAGE_PILL[postStage(p)];
+            return h("button",{class:"cal-post",type:"button",onclick:()=>{S.compareKey=p._key;renderCompare(true)}},
+              h("span",{class:"small muted num"},p["Time (IST)"]||""),h("span",{class:"cal-t"},String(p["Our version"]||"").split("\n")[0].slice(0,60)),pill(l,k))})
+            :h("span",{class:"small muted"},"–"),
+            list.length?h("div",{class:"small "+(list.length>=5?"muted":"")},list.length+" of 5"):null)})))))),
+    !posts.length?emptyBox(S.raw.ours?"Nothing on the calendar yet":"Loading posts…",""):null];
+}
+
+/* ---------- this week, day by day (Post tracker) ---------- */
+// Green: hit 5 posts and engagement grew at least as much as the day before. Red: nothing posted, or engagement
+// gained fell by more than half. Yellow: everything in between. Grey: days still to come.
+function weekGrid(){
+  const accts=Object.keys(HANDLES).filter(a=>S.owner==="All"||a===S.owner);
+  const start=weekStart(0),days=Array.from({length:5},(_,i)=>new Date(start.getTime()+i*DAY));
+  const engAt=(a,t)=>{const last=new Map();for(const r of M.tracking){if(r.Account!==a||r._t>t)continue;const k=linkKey(r["Post link"]);const p=last.get(k);if(!p||r._t>p._t)last.set(k,r)}
+    let s=0;for(const r of last.values())s+=["Likes","Replies","Reposts","Quotes","Bookmarks"].map(c=>num(r[c])||0).reduce((x,y)=>x+y,0);return s};
+  const gained=(a,d)=>engAt(a,d.getTime()+DAY-1)-engAt(a,d.getTime()-1);
+  const postsOn=(a,d)=>M.ours.filter(p=>p.Account===a&&postStage(p)==="posted"&&sameDay(p._date,d)).length;
+  const now=Date.now();
+  const cellOf=(a,d)=>{
+    if(d.getTime()>now)return {k:"future",t:"–"};
+    const n=postsOn(a,d),g=gained(a,d),prev=gained(a,new Date(d.getTime()-DAY));
+    const k=n===0||(prev>0&&g<prev*.5)?"red":n>=5&&g>=prev?"green":"yellow";
+    const delta=prev>0?" ("+(g>=prev?"+":"")+Math.round((g-prev)/prev*100)+"%)":"";
+    return {k,t:n+" posted · +"+fmtK(g)+" engagement"+delta};
+  };
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"This week"),
+    h("p",{class:"sec-hint"},"Green: 5 posts and engagement grew vs the day before. Yellow: fewer posts or flat. Red: nothing posted, or engagement fell by more than half."),
+    h("div",{class:"tbl-wrap"},h("table",{class:"wk"},
+      h("thead",null,h("tr",null,h("th",{scope:"col"},"Account"),days.map(d=>h("th",{scope:"col"},d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric"}))))),
+      h("tbody",null,accts.map(a=>h("tr",null,h("th",{scope:"row"},a),days.map(d=>{const c=cellOf(a,d);return h("td",{class:"wk-"+c.k,title:c.t},h("span",{class:"wk-dot"}),h("span",{class:"small"},c.t))})))))));
+}
+
+/* ---------- their posts → our copies (competitor page) ---------- */
+const viewsOf=t=>num(t.Views)||0;
+function copyGraph(c,posts){
+  const top=posts.filter(t=>!t._li).sort((a,b)=>viewsOf(b)-viewsOf(a)).slice(0,6);
+  if(!top.length)return null;
+  const ourFor=t=>M.ours.find(o=>linkKey(o["Their link"])===linkKey(t.Link));
+  return h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Their biggest posts → our copies"),
+    h("p",{class:"sec-hint"},"Their top X posts by views, each linked to our version. An empty circle is a post we haven't copied yet: copy those next."),
+    h("div",{class:"graph"},top.map(t=>{const o=ourFor(t);
+      return h("div",{class:"g-col"},
+        h("a",{class:"g-node theirs",href:safeUrl(t.Link)||"#",target:"_blank",rel:"noopener"},h("b",{class:"num"},fmtK(viewsOf(t))+" views"),h("span",null,(t.Hook||t["Full text"]||"").split("\n")[0].slice(0,70))),
+        h("div",{class:"g-line"+(o?"":" empty")}),
+        o?h("button",{class:"g-node ours",type:"button",onclick:()=>{S.compareKey=o._key;renderCompare(true)}},h("b",null,"Ours · "+o.Account),
+            h("span",null,postStage(o)==="posted"?(o.Views?fmtK(num(o.Views))+" views":"Posted"):STAGE_PILL[postStage(o)]?STAGE_PILL[postStage(o)][0]:"Later"))
+          :h("button",{class:"g-node empty",type:"button",title:"Copy the original text",onclick:ev=>copy(t["Full text"],ev.currentTarget)},"Not copied yet"));
+    })));
+}
+
+/* ---------- post tracker ---------- */
+// Latest numbers per post from Post Tracking (filled every 3 hours), joined to its Our Posts row when it came from the plan.
+function trackedPosts(){
+  const by=new Map();
+  for(const r of M.tracking){const k=linkKey(r["Post link"]);if(!by.has(k))by.set(k,[]);by.get(k).push(r)}
+  const plan=new Map(M.ours.filter(p=>safeUrl(p["Posted link"])).map(p=>[linkKey(p["Posted link"]),p]));
+  const said=new Map(M.engagers.map(e=>[linkKey(e["Our post link"]),e["Our post"]]));
+  const engOf=r=>["Likes","Replies","Reposts","Quotes","Bookmarks"].map(c=>num(r[c])||0).reduce((a,b)=>a+b,0);
+  const out=[];
+  for(const [k,hist] of by){
+    hist.sort((a,b)=>a._t-b._t);
+    const last=hist[hist.length-1],prev=hist.length>1?hist[hist.length-2]:null,p=plan.get(k)||null;
+    const views=num(last.Views),eng=engOf(last);
+    out.push({key:k,link:last["Post link"],account:last.Account,plan:p,hist,views,eng,rate:rate(eng,views),
+      likes:num(last.Likes)||0,replies:num(last.Replies)||0,reposts:num(last.Reposts)||0,bookmarks:num(last.Bookmarks)||0,
+      grew:prev?(views||0)-(num(prev.Views)||0):null,first:p&&p._date?p._date.getTime():hist[0]._t,
+      text:p?p["Our version"]:(said.get(k)||"")});
+  }
+  for(const [k,p] of plan)if(!by.has(k))out.push({key:k,link:p["Posted link"],account:p.Account,plan:p,hist:[],views:num(p.Views),eng:ourEng(p),
+    rate:rate(ourEng(p),num(p.Views)),likes:num(p.Likes)||0,replies:num(p.Replies)||0,reposts:num(p.Reposts)||0,bookmarks:num(p.Bookmarks)||0,
+    grew:null,first:p._date?p._date.getTime():0,text:p["Our version"],pending:true});
+  return out;
+}
+const fmtX=x=>(Math.round(x*10)/10)+"×";
+const r1=x=>Math.round(x*10)/10;
+// Plain reasons a post did well (or didn't), from its own numbers next to the account's other posts.
+function whyFor(t,all){
+  const out=[];
+  const mine=all.filter(x=>x.account===t.account&&x.rate!=null&&(x.views||0)>=30);
+  const med=median(mine.map(x=>x.rate));
+  if(t.rate!=null&&med&&mine.length>=2){const x=t.rate/med;
+    out.push(x>=1.2?fmtX(x)+" the engagement of "+t.account+"'s usual post ("+r1(t.rate)+" vs "+r1(med)+" per 1K views).":
+      x<=.8?"Below "+t.account+"'s usual: "+r1(t.rate)+" per 1K views vs "+r1(med)+".":"About "+t.account+"'s usual engagement ("+r1(t.rate)+" per 1K views).")}
+  if(t.replies>=3&&t.eng&&t.replies/t.eng>=.3)out.push("It started a conversation: "+t.replies+" replies. The people are under People to DM.");
+  if(t.bookmarks>=2&&t.eng&&t.bookmarks/t.eng>=.15)out.push(t.bookmarks+" people saved it, a sign the content was useful.");
+  if(t.reposts>=2)out.push(t.reposts+" reposts carried it past our own followers.");
+  const p=t.plan;
+  if(p){
+    const type=p["Post type"],sameType=all.filter(x=>x.plan&&x.plan["Post type"]===type&&x.rate!=null),allR=all.filter(x=>x.rate!=null);
+    if(type&&sameType.length>=2&&allR.length>=4){const tm=median(sameType.map(x=>x.rate)),om=median(allR.map(x=>x.rate));
+      if(tm&&om)out.push(type+" posts average "+r1(tm)+" per 1K views, against "+r1(om)+" for everything we post.")}
+    const o=originalFor(p);
+    if(o&&o._rank)out.push("It copies "+(o._comp?o._comp.Name:o.Competitor)+"'s #"+o._rank.comp+" post"+(o._rank.comp<=3?" (a proven format)":"")+".");
+    const media=String(p["Media needed"]||"");
+    out.push(!media||/^none/i.test(media)?"Text only.":"Posted with media ("+media.split(/[.(:]/)[0].trim().toLowerCase()+").");
+    const len=String(p["Our version"]||"").length;if(len)out.push(len<240?"Short: "+len+" characters.":"Long: "+len+" characters.");
+    if(p["Time (IST)"])out.push("Went out at "+p["Time (IST)"]+" IST.");
+  }
+  return out;
+}
+// Patterns across everything posted so far: which type, account and hour do best.
+function nextMoves(all){
+  const rated=all.filter(x=>x.rate!=null&&(x.views||0)>=30);
+  if(rated.length<3)return [];
+  const best=(keyOf,label)=>{const by=new Map();for(const t of rated){const k=keyOf(t);if(!k)continue;if(!by.has(k))by.set(k,[]);by.get(k).push(t.rate)}
+    const rows=Array.from(by,([k,v])=>({k,n:v.length,m:median(v)})).filter(r=>r.n>=2).sort((a,b)=>b.m-a.m);
+    return rows.length>=2?label(rows[0],rows[rows.length-1]):null};
+  const hourOf=t=>{const m=String((t.plan&&t.plan["Time (IST)"])||"").match(/^(\d{1,2})/);if(!m)return null;const hr=+m[1];return (hr>12?hr-12:hr)+(hr>=12?" PM":" AM")+" IST"};
+  return [
+    best(t=>t.plan&&t.plan["Post type"],(a,b)=>a.k+" posts do best ("+r1(a.m)+" per 1K views over "+a.n+" posts); "+b.k+" posts do worst ("+r1(b.m)+"). Plan more "+a.k.toLowerCase()+" posts."),
+    best(t=>t.account,(a,b)=>a.k+"'s posts get the most engagement per view ("+r1(a.m)+" per 1K), "+b.k+"'s the least ("+r1(b.m)+")."),
+    best(hourOf,(a,b)=>"Posts around "+a.k+" do best ("+r1(a.m)+" per 1K views); around "+b.k+" the least ("+r1(b.m)+")."),
+  ].filter(Boolean);
+}
+function svgFrom(markup){const d=document.createElement("div");d.innerHTML=markup;return d.firstElementChild}
+const ESC={"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"};
+const escText=s=>String(s).replace(/[&<>"]/g,c=>ESC[c]);
+// One or more lines over time. series: [{name,color,points:[[t,v],...]}]
+function lineChart(series,label){
+  const pts=series.flatMap(s=>s.points);
+  if(pts.length<2)return null;
+  const W=640,H=170,L=46,R=12,T=12,B=26;
+  const t0=Math.min(...pts.map(p=>p[0])),t1=Math.max(...pts.map(p=>p[0])),vmax=Math.max(1,...pts.map(p=>p[1]));
+  const x=t=>L+(t1>t0?(t-t0)/(t1-t0):.5)*(W-L-R),y=v=>T+(1-v/vmax)*(H-T-B);
+  const day=t=>{const d=new Date(t);return d.getDate()+" "+MON[d.getMonth()]};
+  const txt=(x0,y0,s,anchor)=>"<text x=\""+x0+"\" y=\""+y0+"\" font-size=\"11\" fill=\"var(--ink-3)\""+(anchor?" text-anchor=\""+anchor+"\"":"")+">"+escText(s)+"</text>";
+  let m="<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 "+W+" "+H+"\" role=\"img\" aria-label=\""+escText(label)+"\">";
+  m+="<line x1=\""+L+"\" x2=\""+(W-R)+"\" y1=\""+y(0)+"\" y2=\""+y(0)+"\" stroke=\"var(--line-2)\"/>";
+  m+="<line x1=\""+L+"\" x2=\""+(W-R)+"\" y1=\""+y(vmax)+"\" y2=\""+y(vmax)+"\" stroke=\"var(--line)\" stroke-dasharray=\"3 3\"/>";
+  m+=txt(L-6,y(vmax)+4,fmtK(vmax),"end")+txt(L-6,y(0)+4,"0","end")+txt(L,H-6,day(t0))+txt(W-R,H-6,day(t1),"end");
+  for(const s of series){if(!s.points.length)continue;
+    m+="<polyline fill=\"none\" stroke=\""+s.color+"\" stroke-width=\"2\" stroke-linejoin=\"round\" points=\""+s.points.map(p=>x(p[0]).toFixed(1)+","+y(p[1]).toFixed(1)).join(" ")+"\"/>";
+    const e=s.points[s.points.length-1];m+="<circle cx=\""+x(e[0]).toFixed(1)+"\" cy=\""+y(e[1]).toFixed(1)+"\" r=\"3\" fill=\""+s.color+"\"/>"}
+  return svgFrom(m+"</svg>");
+}
+function spark(hist){
+  const v=hist.map(r=>num(r.Views)||0);
+  if(v.length<2)return h("span",{class:"small muted"},"–");
+  const W=90,H=24,max=Math.max(1,...v);
+  return svgFrom("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"spark\" width=\""+W+"\" height=\""+H+"\" viewBox=\"0 0 "+W+" "+H+"\" aria-hidden=\"true\"><polyline fill=\"none\" stroke=\"var(--mid)\" stroke-width=\"1.6\" points=\""+
+    v.map((n,i)=>(i/(v.length-1)*(W-2)+1).toFixed(1)+","+(H-2-n/max*(H-4)).toFixed(1)).join(" ")+"\"/></svg>");
+}
+const ACCOUNT_COLOR={Karan:"var(--out)",Shreenabh:"var(--mid)",Aktoria:"var(--in)"};
+function viewNumbers(){
+  const own=a=>S.owner==="All"||a===S.owner;
+  const all=trackedPosts();
+  const live=all.filter(t=>own(t.account));
+  const sorters={rate:(a,b)=>(b.rate??-1)-(a.rate??-1),views:(a,b)=>(b.views||0)-(a.views||0),new:(a,b)=>(b.first||0)-(a.first||0)};
+  live.sort(sorters[S.trackSort]||sorters.rate);
+  const views=live.map(t=>t.views||0).reduce((a,b)=>a+b,0),eng=live.map(t=>t.eng||0).reduce((a,b)=>a+b,0);
+  const toDM=M.engagers.filter(e=>own(e.Account)&&e.Status!=="Messaged").length;
+  const tile=(v,l,go)=>h(go?"button":"div",{class:"kpi",type:go?"button":null,style:go?null:"cursor:default",onclick:go?()=>{location.hash=go}:null},h("span",{class:"lbl"},l),h("span",{class:"n"},v));
+  const out=[viewHead("Post tracker","How our X posts are doing, checked every 3 hours: views, likes, replies and reposts, how they grow, and why the best ones worked. Press Mark as posted on a post in Our posts so it's tracked; posts we put out without it are found by their text.")];
+  out.push(h("div",{class:"kpis"},tile(live.length,"Posts tracked"),tile(fmtK(views),"Views"),tile(fmtK(eng),"Likes, replies, reposts, saves"),
+    tile(rate(eng,views)!=null?r1(rate(eng,views)):"–","Engagement per 1K views"),tile(toDM,"People to DM","engagers")));
+  out.push(weekGrid());
+  // Traction over time: views across all tracked posts at each check, and followers per account.
+  const times=Array.from(new Set(M.tracking.filter(r=>own(r.Account)).map(r=>r._t))).sort((a,b)=>a-b);
+  if(times.length>=2){
+    const hist=live.filter(t=>t.hist.length);
+    const totalAt=tt=>hist.reduce((s,t)=>{let v=0;for(const r of t.hist){if(r._t<=tt)v=num(r.Views)||0;else break}return s+v},0);
+    const vChart=lineChart([{name:"Views",color:"var(--ink)",points:times.map(tt=>[tt,totalAt(tt)])}],"Total views on our posts over time");
+    const accts=Object.keys(HANDLES).filter(own);
+    const fol=accts.map(a=>{const rows=M.tracking.filter(r=>r.Account===a&&num(r.Followers)!=null).sort((x,y)=>x._t-y._t);
+      const pts=[];for(const r of rows){if(!pts.length||pts[pts.length-1][0]!==r._t)pts.push([r._t,num(r.Followers)])}return {name:a,color:ACCOUNT_COLOR[a],points:pts}});
+    const fChart=lineChart(fol,"Followers per account over time");
+    out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Traction over time"),
+      h("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"},
+        vChart?h("div",{class:"chart"},h("span",{class:"lbl"},"Total views on our posts"),vChart):null,
+        fChart?h("div",{class:"chart"},h("span",{class:"lbl"},"Followers (goal: "+PILOT.followerTarget.toLocaleString()+" each)"),fChart,
+          h("div",{class:"chips"},fol.filter(f=>f.points.length).map(f=>{const a=f.points[0][1],b=f.points[f.points.length-1][1];
+            return h("span",{class:"chip",style:"border-color:"+f.color+";color:"+f.color},f.name+": "+fmtK(b)+(b-a?" ("+(b>a?"+":"")+(b-a)+")":""))}))):null)));
+  }else if(live.length)out.push(h("p",{class:"note"},"The traction chart fills in after the tracker's second check (it runs every 3 hours)."));
+  if(!live.length){out.push(emptyBox("No posts tracked yet","Open Our posts, press Mark as posted on a post you've put out and paste its X link. The tracker picks it up within 3 hours, and also finds our posts by their text."));return out}
+  // Best posts with the reasons.
+  const top=live.filter(t=>t.rate!=null&&(t.views||0)>=30).slice().sort(sorters.rate).slice(0,3);
+  if(top.length)out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"What did well and why"),
+    h("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(280px,1fr))"},top.map((t,i)=>h("article",{class:"post"},
+      h("div",{class:"post-meta"},pill("#"+(i+1),"ink"),h("b",null,t.account),h("span",null,fmtK(t.views)+" views · "+r1(t.rate)+" per 1K")),
+      h("p",{class:"body clamp",style:"margin:0;color:var(--ink)"},String(t.text||"Post on X").split("\n")[0]),
+      h("ul",{class:"why"},whyFor(t,all).map(s=>h("li",null,s))),
+      h("div",{class:"links"},t.plan?h("button",{class:"btn sm",type:"button",onclick:()=>{S.compareKey=t.plan._key;renderCompare(true)}},"Compare with the original"):null,ext(t.link,"Open on X")))))));
+  const moves=nextMoves(all.filter(t=>own(t.account)));
+  if(moves.length)out.push(h("section",{class:"panel"},h("h3",null,"Patterns so far"),moves.map(s=>h("p",{style:"margin:0"},s))));
+  // Every post.
+  const seg=[["rate","Best engagement"],["views","Most views"],["new","Newest"]];
+  out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Every post",h("span",{class:"num"},live.length)),
+    h("div",{class:"seg",role:"group","aria-label":"Sort"},seg.map(([v,l])=>h("button",{type:"button","aria-pressed":String(S.trackSort===v),onclick:()=>{S.trackSort=v;render()}},l))),
+    h("div",{class:"tbl-wrap"},h("table",null,
+      h("thead",null,h("tr",null,["Post","Account","Views","Likes","Replies","Reposts","Per 1K views","Trend","Result"].map(t=>h("th",{scope:"col"},t)))),
+      h("tbody",null,live.slice(0,shownOf("numbers")).map(t=>{
+        const open=()=>{if(t.plan){S.compareKey=t.plan._key;renderCompare(true)}else window.open(t.link,"_blank","noopener")};
+        const o=t.plan?originalFor(t.plan):null;
+        return h("tr",{class:"click",tabindex:"0",onclick:open,onkeydown:ev=>{if(ev.key==="Enter")open()}},
+          h("td",{class:"wrap-text"},h("b",null,String(t.text||"Post on X").split("\n")[0].slice(0,110)),
+            h("div",{class:"small muted"},t.plan?"Copied from "+((o&&o._comp?o._comp.Name:t.plan.Competitor)||"a competitor")+" · "+(t.plan["Post type"]||""):"Not from the plan"),
+            t.pending?h("div",{class:"small muted"},"Waiting for the tracker's first check"):null),
+          h("td",null,t.account),
+          h("td",{class:"num"},fmtK(t.views),t.grew?h("div",{class:"small",style:"color:var(--green)"},"+"+fmtK(t.grew)+" since last check"):null),
+          h("td",{class:"num"},fmtK(t.likes)),h("td",{class:"num"},fmtK(t.replies)),h("td",{class:"num"},fmtK(t.reposts)),
+          h("td",{class:"num"},t.rate!=null?r1(t.rate):"–"),h("td",null,spark(t.hist)),
+          h("td",null,t.plan&&t.plan.Result?pill(t.plan.Result,/beat/i.test(t.plan.Result)?"green":"line"):h("span",{class:"small muted"},t.plan?"After 7 days":"–")));
+      })))),moreBtn("numbers",live.length,true)));
+  const w=workingPanel();if(w)out.push(w);
+  return out;
+}
+
+/* ---------- people who replied to or quoted our posts ---------- */
+const FIT_ORDER={"Robotics leader":0,"Robotics":1,"Investor":2,"Other":3};
+function viewEngagers(){
+  const own=a=>S.owner==="All"||a===S.owner;
+  const q=S.q.trim().toLowerCase();
+  const all=M.engagers.filter(e=>own(e.Account)&&(!q||[e.Name,e.Handle,e.Bio,e["What they said"],e["Our post"]].join(" ").toLowerCase().indexOf(q)>=0));
+  const todo=all.filter(e=>e.Status!=="Messaged"),done=all.filter(e=>e.Status==="Messaged");
+  const list=(S.engTab==="done"?done:S.engTab==="all"?all:todo).slice().sort((a,b)=>((FIT_ORDER[a.Fit]??4)-(FIT_ORDER[b.Fit]??4))||((b["DMs open"]==="Yes")-(a["DMs open"]==="Yes"))||((num(b.Followers)||0)-(num(a.Followers)||0)));
+  const out=[viewHead("People to DM","Everyone who replied to or quoted our X posts, robotics people first, each with a message ready. Copy it, send it from the account shown, then mark them messaged. X only shows who liked a post to its author, so likers can't be listed here.")];
+  out.push(h("div",{class:"seg",role:"group","aria-label":"Show"},[["todo","To message",todo.length],["done","Messaged",done.length],["all","All",all.length]].map(([v,l,n])=>
+    h("button",{type:"button","aria-pressed":String(S.engTab===v),onclick:()=>{S.engTab=v;S.show.eng=0;render()}},l+" ("+n+")"))));
+  const fromRivals=M.contacts.filter(c=>ENGAGED.has(c.Segment)).length;
+  if(fromRivals)out.push(h("p",{class:"note"},fromRivals+" more people who engaged with competitor posts are already in the DM list. ",h("a",{href:"#engaged",onclick:ev=>{ev.preventDefault();go("engaged")}},"See them")));
+  if(!list.length){out.push(emptyBox(S.raw.engagers?(S.engTab==="done"?"Nobody messaged yet":"Nobody to message yet"):"Loading…","The post tracker looks for new replies and quotes on our posts every 3 hours."));return out}
+  out.push(h("div",{class:"grid",style:"grid-template-columns:minmax(0,1fr)"},list.slice(0,shownOf("eng")).map(e=>{
+    const busy=S.busy.has(e._key),fitKind=e.Fit==="Robotics leader"?"green":e.Fit==="Robotics"?"blue":"line";
+    const said=String(e["What they said"]||"").replace(/^(@\w+\s*)+/,"");
+    return h("article",{class:"post"},
+      h("div",{class:"post-meta"},h("b",null,e.Name||e.Handle),h("span",null,e.Handle+" · "+fmtK(num(e.Followers))+" followers"),pill(e.Fit,fitKind),
+        e["DMs open"]==="Yes"?pill("DMs open","green"):e["DMs open"]==="No"?pill("DMs closed","amber"):null,e.Status==="Messaged"?pill("Messaged "+(e["Messaged on"]||""),"ink"):null),
+      e.Bio?h("p",{class:"small muted",style:"margin:0"},e.Bio):null,
+      h("p",{style:"margin:0"},h("span",{class:"lbl"},e.How+" on "+e.Account+"'s post: "),"“"+String(e["Our post"]||"").slice(0,100)+"”"),
+      said?h("p",{style:"margin:0"},h("span",{class:"lbl"},"They said: "),"“"+said+"”"):null,
+      h("div",{class:"msg current"},h("div",{class:"msg-h"},h("span",{class:"lbl"},"Message · send from "+(e["Send from"]||e.Account)),
+        h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(e["DM ready"],ev.currentTarget)},"Copy")),h("p",null,e["DM ready"])),
+      h("div",{class:"links"},ext(xUrl(e.Handle),"Open their profile"),ext(e["Their link"],e.How==="Quoted"?"Their quote":"Their reply"),
+        e.Status!=="Messaged"?h("button",{class:"btn primary sm",type:"button",disabled:busy||!canEdit()||null,onclick:()=>saveMessaged(e)},busy?"Saving…":"Mark messaged"):null));
+  })),moreBtn("eng",list.length,true));
+  return out;
+}
+
+/* ---------- Photos ---------- */
+function viewPhotos(){
+  const q=S.q.trim().toLowerCase();
+  const waiting=M.ours.filter(p=>p["Media needed"]&&!/^(none|text only)$/i.test(p["Media needed"])&&!p["Media file"]&&!/posted/i.test(p.Status||"")
+    &&(!q||[p["Our version"],p["Media needed"],p.Account].join(" ").toLowerCase().indexOf(q)>=0));
+  return [
+    viewHead("Photos","Where the founders drop photos and videos, and which planned posts are still waiting for one."),
+    h("div",{class:"folders"},FOLDERS.map((f,i)=>h("a",{class:"folder",href:folderUrl(f.id),target:"_blank",rel:"noopener"},
+      h("span",{class:"fn"},"Folder "+(i+1)),h("b",null,f.name+" ↗"),h("span",null,f.what)))),
+    h("section",{class:"sec-wrap"},h("h2",{class:"sec"},"Posts waiting for a photo or video",h("span",{class:"num"},waiting.length)),
+      waiting.length?h("div",{class:"list"},waiting.slice(0,shownOf("photos")).map(p=>{
+        const folder=FOLDERS.find(f=>p["Drive folder"]&&(p["Drive folder"].indexOf(f.id)>=0||norm(p["Drive folder"]).indexOf(norm(f.name))>=0));
+        return h("div",{class:"row",style:"cursor:default;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto"},
+          h("div",{class:"who"},h("div",null,h("b",null,p.Account)," ",h("span",{class:"muted"},"· "+[p.Date,p["Post type"]].filter(Boolean).join(" · "))),h("div",{class:"sub"},String(p["Our version"]||"").split("\n")[0])),
+          h("div",{class:"ctx"},p["Media needed"]),
+          h("div",{class:"acts"},folder?h("a",{class:"btn sm",href:folderUrl(folder.id),target:"_blank",rel:"noopener"},"Open "+folder.name+" ↗"):null));
+      }),moreBtn("photos",waiting.length)):emptyBox("No posts are waiting for media","Planned posts that need a real photo, video or chart show up here with the folder to use."))];
+}
+
+/* ---------- DM templates ---------- */
+function viewTemplates(){
+  const hd=S.raw.stats?(S.raw.stats[0]||[]).map(String):[];
+  const groups=uniq(M.templates.map(t=>t.Account)).filter(a=>S.owner==="All"||a===S.owner);
+  const out=[viewHead("DM templates","What each account says in DMs, and which messages get replies.")];
+  if(M.stats.length)out.push(h("div",{class:"tbl-wrap"},h("table",{style:"min-width:760px"},
+    h("thead",null,h("tr",null,hd.map(t=>h("th",{scope:"col"},t)))),
+    h("tbody",null,M.stats.filter(s=>S.owner==="All"||s.Account===S.owner).map(s=>h("tr",null,hd.map((k,i)=>h("td",{class:i?"num":null},i?(s[k]||"–"):h("b",null,s[k])))))))));
+  for(const g of groups){
+    const ts=M.templates.filter(t=>t.Account===g);
+    out.push(h("section",{class:"sec-wrap"},h("h2",{class:"sec"},g,h("span",{class:"num"},ts.length)),
+      h("div",{class:"grid"},ts.map(t=>h("article",{class:"panel"},
+        h("div",{class:"panel-top"},h("div",null,h("h3",null,t.ID+" · "+plain(t.Intent||"")),h("div",{class:"small muted"},t["Use it for"]||"")),t.Verdict?pill(t.Verdict,/kill|drop/i.test(t.Verdict)?"red":/keep|win|double/i.test(t.Verdict)?"green":"line"):null),
+        [["First message",t.Opener],["Follow-up 1 · day 3",pick(t,"Follow-up 1")],["Follow-up 2 · day 7",pick(t,"Follow-up 2")]].filter(x=>x[1]).map(([l,txt])=>h("div",{class:"msg"},h("div",{class:"msg-h"},h("span",{class:"lbl"},l),h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(txt,ev.currentTarget)},"Copy")),h("p",null,txt))),
+        h("div",{class:"stats"},
+          h("span",null,h("span",{class:"num"},t.Sent||"0")," sent"),h("span",null,h("span",{class:"num"},t.Replies||"0")," replies"),
+          h("span",null,"reply rate ",h("span",{class:"num"},t["Reply rate"]||"–")),h("span",null,h("span",{class:"num"},t.Calls||"0")," calls")))))));
+  }
+  if(!M.templates.length)out.push(emptyBox(S.raw.templates?"No templates found":"Loading DM templates…"));
+  return out;
+}
+
+/* ---------- contact panel ---------- */
+const TL_LABEL={"Sent on":"Sent on","FU1 due":"Follow-up 1 due","FU1 sent":"Follow-up 1 sent","FU2 due":"Follow-up 2 due","FU2 sent":"Follow-up 2 sent","Replied on":"Replied on","Call on":"Call on","Hours to first touch":"Hours to first message"};
+function openContact(c){S.openKey=c._key;S.drawerStale=false;renderDrawer(true)}
+function closeDrawer(){S.openKey=null;renderDrawer(true)}
+function renderDrawer(force){
+  const host=$("#drawer-host");
+  const c=S.openKey?M.contacts.find(x=>x._key===S.openKey):null;
+  if(!c){host.replaceChildren();document.body.classList.remove("locked");return}
+  const a=document.activeElement;
+  if(!force&&host.contains(a)&&/^(TEXTAREA|INPUT)$/.test(a.tagName)){S.drawerStale=true;return}
+  S.drawerStale=false;
+  document.body.classList.add("locked");
+  const busy=S.busy.has(c._key)||!canEdit();
+  const m=messages(c);
+  const wait=fuWaiting(c);
+  const cur=c._status==="To send"?"opener":wait?"":c._status==="Sent"?"fu1":c._status==="FU1 sent"?"fu2":"";
+  const fuLabel=(n,due,base)=>wait&&c._status===(n===1?"Sent":"FU1 sent")&&c[due]?"Follow-up "+n+" · not yet, send on "+c[due]:base;
+  const li=safeUrl(c.LinkedIn),x=xUrl(c["X handle"]),sig=safeUrl(c["Signal link"]);
+  const draft=S.drafts[c._key];
+  const statusSel=h("select",{class:"sel",id:"d-status","aria-label":"Stage",value:STATUSES.indexOf(c._status)>=0?c._status:"",disabled:busy||null,onchange:ev=>{if(ev.target.value)setStatus(c,ev.target.value)}},
+    STATUSES.indexOf(c._status)<0?h("option",{value:""},c._status):null,STATUSES.map(s=>h("option",{value:s},sl(s))));
+  const msg=(id,label,text)=>text?h("div",{class:"msg"+(cur===id?" current":"")},
+    h("div",{class:"msg-h"},h("span",{class:"lbl"},label+(cur===id?" · send this next":"")),h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(text,ev.currentTarget)},"Copy")),h("p",null,text)):null;
+  host.replaceChildren(
+    h("div",{class:"scrim",onclick:closeDrawer}),
+    h("aside",{class:"drawer",role:"dialog","aria-modal":"true","aria-label":c.Name},
+      h("div",{class:"d-head"},
+        h("div",null,h("h2",null,c.Name),h("p",null,[c.Role,c.Company].filter(Boolean).join(" · "))),
+        h("button",{class:"btn",type:"button",id:"d-close",onclick:closeDrawer},"Close")),
+      h("div",{class:"chips"},priBadge(c),pill(al(c["Next action"]),actionKind(c["Next action"])),
+        c.Owner?h("span",{class:"chip"},"Owner: "+c.Owner):null,c.Channel?h("span",{class:"chip"},c.Channel):null,
+        c["Warm/Cold"]?h("span",{class:"chip"},WARM_LABEL[c["Warm/Cold"]]||c["Warm/Cold"]):null,c.Segment?h("span",{class:"chip"},segl(c.Segment)):null,
+        c["Fit (1-10)"]?h("span",{class:"chip"},"Fit "+c["Fit (1-10)"]+" of 10"):null),
+      h("div",{class:"d-sec"},h("span",{class:"lbl"},"Stage"),
+        h("div",{class:"status-row"},statusSel,(NEXT_STEPS[c._status]||[]).filter(([s])=>!(wait&&/^FU[12] sent$/.test(s))).map(([s,l],i)=>h("button",{class:"btn"+(i===0?" primary":""),type:"button",disabled:busy||null,onclick:()=>setStatus(c,s)},l)),
+          S.busy.has(c._key)?h("span",{class:"small muted"},"Saving to the sheet…"):null),
+        S.pub?h("span",{class:"small muted"},"Changes save to the sheet. The first time, it asks for the team passcode."):!S.mcp?h("span",{class:"small muted"},"Open on claude.ai with Google Sheets connected to change the stage."):null),
+      (li||x||c.Email)?h("div",{class:"d-sec"},h("span",{class:"lbl"},"How to reach them"),h("div",{class:"link-row"},
+        li?h("a",{class:"btn sm",href:li,target:"_blank",rel:"noopener"},"LinkedIn ↗"):null,
+        x?h("a",{class:"btn sm",href:x,target:"_blank",rel:"noopener"},c["X handle"]+" on X ↗"):null),
+        c.Email?h("div",{class:"link-row"},h("code",null,c.Email),h("button",{class:"btn ghost sm",type:"button",onclick:ev=>copy(c.Email,ev.currentTarget)},"Copy email")):null):null,
+      c["Funding stage"]?h("div",{class:"d-sec"},h("span",{class:"lbl"},"Funding"),
+        h("div",{class:"link-row"},fundPill(c),h("span",{class:"small"},c["Funding stage"]),ext(c["Funding source"],"Source")),
+        fundKind(c)==="early"?h("p",{class:"small muted",style:"margin:0"},"Seed or pre-seed: we don't DM these (no budget for Aktoria yet)."):null):null,
+      (c["Likely to buy"]||c["DM result"])?h("div",{class:"d-sec"},
+        c["Likely to buy"]?[h("span",{class:"lbl"},"Most likely to buy from Aktoria"),h("p",{class:"lead",style:"margin:0"},c["Likely to buy"])]:null,
+        c["DM result"]?h("div",{class:/^not sent/i.test(c["DM result"])?"banner":"note"},c["DM result"]):null):null,
+      c["Signal (why now)"]?h("div",{class:"d-sec"},h("span",{class:"lbl"},"Why now"),
+        h("p",{class:"lead",style:"margin:0"},plain(c["Signal (why now)"]),c["Signal time"]?h("span",{class:"muted num small"}," · "+c["Signal time"]):null),
+        sig?h("div",null,h("a",{class:"btn sm",href:sig,target:"_blank",rel:"noopener"},"Open the source ↗")):null):null,
+      h("div",{class:"d-sec"},h("span",{class:"lbl"},"Messages"+(c.Template?" · DM template "+c.Template:"")),
+        msg("opener","First message",m.opener),msg("fu1",fuLabel(1,"FU1 due","Follow-up 1 · day 3"),m.fu1),msg("fu2",fuLabel(2,"FU2 due","Follow-up 2 · day 7"),m.fu2),
+        (!m.opener&&!m.fu1&&!m.fu2)?h("p",{class:"muted small",style:"margin:0"},"No message written for this person yet."):null),
+      h("div",{class:"d-sec"},h("span",{class:"lbl"},"Dates"),
+        h("div",{class:"timeline"},Object.keys(TL_LABEL).filter(k=>M.headers.indexOf(k)>=0).map(k=>h("div",{class:"tl"},h("div",{class:"lbl"},TL_LABEL[k]),h("div",null,c[k]||(c._status!=="To send"&&/sent|Replied|Call/.test(k)?"Not yet":"–"))))),
+        h("div",{class:"status-row"},h("label",{for:"d-call",class:"small muted"},"Set the call date"),h("input",{type:"date",id:"d-call",disabled:busy||null}),
+          h("button",{class:"btn sm",type:"button",disabled:busy||null,onclick:()=>{
+            const v=($("#d-call")||{}).value;if(!v){toast("Pick a date first.",true);return}
+            const [y,mo,d]=v.split("-").map(Number);const serial=(Date.UTC(y,mo-1,d)-Date.UTC(1899,11,30))/864e5;
+            const cells={"Call on":serial};if(c._status!=="Call booked"&&c._status!=="Customer")cells.Status="Call booked";
+            write(c,cells,"call on "+d+" "+MON[mo-1]);
+          }},"Save call date"))),
+      h("div",{class:"d-sec"},h("label",{class:"lbl",for:"d-notes"},"Notes"),
+        h("textarea",{id:"d-notes",value:draft!=null?draft:(c.Notes||""),disabled:busy||null,oninput:ev=>{S.drafts[c._key]=ev.target.value}}),
+        h("div",{class:"status-row"},h("button",{class:"btn primary sm",type:"button",disabled:busy||null,onclick:async()=>{
+            const v=($("#d-notes")||{}).value||"";
+            const ok=await write(c,{Notes:v},"notes for "+c.Name);
+            if(ok)delete S.drafts[c._key];
+          }},"Save notes"),draft!=null&&draft!==(c.Notes||"")?h("span",{class:"small muted"},"Not saved yet"):null)),
+      h("p",{class:"small muted",style:"margin:0"},"Row "+c._row+" on the DM Pipeline tab.")));
+  if(force){const b=$("#d-close");if(b)b.focus()}
+}
+document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.drawerStale){const a=document.activeElement;if(!$("#drawer-host").contains(a)||!/^(TEXTAREA|INPUT)$/.test(a.tagName))renderDrawer()}},0)});
+document.addEventListener("keydown",ev=>{if(ev.key!=="Escape")return;if(S.compareKey){S.compareKey=null;renderCompare(true)}else if(S.openKey)closeDrawer()});
+
+/* ---------- render ---------- */
+let pending=false;
+function schedule(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render()})}
+const VIEW_FN={today:viewToday,competitor:viewCompetitor,numbers:viewNumbers,engagers:viewEngagers,calendar:viewCalendar,send:viewSend,replies:viewReplies,calls:viewCalls,engaged:viewEngaged,pipeline:viewPipeline,people:viewPeople,companies:viewCompanies,competitors:viewCompetitors,"their-posts":viewTheirPosts,"our-posts":viewOurPosts,photos:viewPhotos,templates:viewTemplates};
+function render(){
+  renderChrome();
+  const main=$("#main"),y=window.scrollY,bd=$("#board"),bx=bd?bd.scrollLeft:0;
+  const g=gate();
+  if(g){main.replaceChildren(g);renderDrawer();return}
+  const body=[].concat((VIEW_FN[S.view]||viewToday)()).filter(Boolean);
+  const tabs=subTabs();if(tabs)body.splice(body[0]&&body[0].classList&&body[0].classList.contains("head")?1:0,0,tabs);
+  main.replaceChildren(...[staleBanner()].concat(body).filter(Boolean));
+  const nb=$("#board");if(nb&&bx)nb.scrollLeft=bx;
+  window.scrollTo(0,y);
+  renderDrawer();
+  renderCompare();
+}
+$("#menu-btn").addEventListener("click",()=>menu(!$("#sidenav").classList.contains("open")));
+$("#menu-scrim").addEventListener("click",()=>menu(false));
+let qTimer;
+$("#q").addEventListener("input",ev=>{clearTimeout(qTimer);qTimer=setTimeout(()=>{S.q=ev.target.value;S.show={};render()},120)});
+window.addEventListener("hashchange",()=>{const id=(location.hash||"").slice(1);if(id&&id!==S.view)go(id)});
+setInterval(renderSync,30000);
+
+(function boot(){
+  const id=(location.hash||"").slice(1);
+  const v=OLD_HASH[id]||id;
+  if(/^competitor-/.test(v)){S.view="competitor";S.compSlug=v.slice(11)}
+  else if(VIEWS.some(x=>x[0]===v))S.view=v;
+  render();
+  if(!(window.claude&&window.claude.use)){S.mcp=null;S.pub=true;render();publicLoad();setInterval(publicLoad,60000);return}
+  window.claude.use("mcp").then(mcp=>{
+    S.mcp=mcp||null;
+    if(S.mcp)Object.keys(RANGES).forEach(watch);
+    render();
+  },()=>{S.mcp=null;render()});
+})();
+})();
+</script>
+
+</html>
