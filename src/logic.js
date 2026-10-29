@@ -46,7 +46,7 @@ const byPri=(a,b)=>((b.priN==null?-99:b.priN)-(a.priN==null?-99:a.priN))||((b.fi
 function person(c){
   const stage=SHEET2STAGE[c._status]||'To send';
   const act=c['Next action']||'';
-  const fk=AK.fundKind(c);const fRaw=String(c['Funding stage']||'');const fShort=fRaw.split(/\s+[·�]\s+/)[0].trim();
+  const fk=AK.fundKind(c);const fRaw=String(c['Funding stage']||'');const fShort=fRaw.split(/\s+[·–-]\s+/)[0].trim();
   const m=AK.messages(c);
   const pn=c._pri;const fitN=c._fit;
   const lk=String(c['Likely to buy']||'');const li=lk.indexOf(':');
