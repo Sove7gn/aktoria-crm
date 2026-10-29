@@ -37,6 +37,13 @@ const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Sched
 // Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
 const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
 const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
+// Calendar (29 Oct): only posts planned to go live show (3 posting slots per account a day); drafts whose Time is
+// "Option" stay off it until someone adds them with +. Times follow the account's slots in the order shown.
+const SLOTS={Karan:['7:30 PM','9:45 PM','11:00 PM'],Shreenabh:['7:45 PM','10:15 PM','11:15 PM'],Aktoria:['8:00 PM','10:30 PM','11:30 PM']};
+const EXTRA_SLOTS=['12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM'];
+// An option = a draft not placed on a slot yet: Time "Option" or blank. Posted and scheduled posts always show.
+const isOpt=p=>p.status!=='Posted'&&p.status!=='Scheduled'&&/^(option)?$/i.test(String(p.o['Time (IST)']||'').trim());
+const dfmt=d=>d.getDate()+' '+AK.MON[d.getMonth()]+' '+d.getFullYear();
 const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
 /* sheet <-> design */
@@ -82,7 +89,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -415,12 +422,39 @@ class Component extends DCLogic {
     const days=DOW.map((d,i)=>{const dt=new Date(start.getTime()+i*AK.DAY);const today=AK.sameDay(dt,now);const rel=Math.round((dt-t0)/AK.DAY);const sel=s.calDay===i;return{dow:d,num:String(dt.getDate()),mon:MON[dt.getMonth()],date:dt,rel,today,numBg:today?'var(--ink)':'transparent',numFg:today?'#fff':'var(--ink)',hbg:today?'oklch(0.965 0.02 300 / .55)':'transparent',pick:()=>this.setState({calDay:i}),chipBg:sel?'var(--ink)':'rgba(255,255,255,.75)',chipFg:sel?'#fff':'var(--ink)',chipSub:sel?'rgba(255,255,255,.7)':'var(--ink-3)',chipSh:sel?'0 6px 16px -6px rgba(19,20,24,.45)':'var(--shadow-xs), inset 0 0 0 1px var(--hairline)',todayDot:today?(sel?'#fff':'var(--in)'):'transparent'};});
     const rows=this.accs().map(a=>({...a,...avatar(avName(a.name)),cells:days.map(d=>this.calCell(a,d))}));
     const sd=days[s.calDay]||days[0];const dow=(now.getDay()+6)%7;
-    return{days,rows,label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0,calDay:dow}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',dayRows:rows.map(r=>({...r,cell:r.cells[s.calDay]||r.cells[0]})),selDay:sd.dow+' '+sd.num+' '+sd.mon};}
+    return{days,rows,label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0,calDay:dow}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',dayRows:rows.map(r=>({...r,cell:r.cells[s.calDay]||r.cells[0]})),selDay:sd.dow+' '+sd.num+' '+sd.mon,pick:this.calPickVals()};}
+  dayList(acc,date){return this.postList().filter(p=>p.account===acc&&p.status!=='Later'&&!isOpt(p)&&p.o._date&&AK.sameDay(p.o._date,date)).sort((x,y)=>AK.minutesOf(x.o['Time (IST)'])-AK.minutesOf(y.o['Time (IST)']));}
   calCell(a,d){
-    const list=this.postList().filter(p=>p.account===a.acc&&p.status!=='Later'&&p.o._date&&AK.sameDay(p.o._date,d.date)).sort((x,y)=>AK.minutesOf(x.o['Time (IST)'])-AK.minutesOf(y.o['Time (IST)']));
-    const n=list.length;
-    const posts=list.map(p=>{const S=CST[p.status]||CST['To post'];return{time:p.o['Time (IST)']||'–',line:firstLine(p.text),st:p.status,dot:S.dot,sbg:S.bg,sfg:S.fg,open:()=>this.openPost(p.id)};});
-    return{posts:posts.slice(0,3),all:posts,hasAll:n>0,more:String(Math.max(0,n-3)),hasMore:n>3,count:n+' of 5',cfg:n>=5?'var(--ok-ink)':(n===0&&d.rel<=0)?'var(--bad-ink)':'var(--ink-3)',segs:[0,1,2,3,4].map(k=>({bg:k<n?(CST[list[k].status]||CST['To post']).dot:'var(--n-soft-2)'})),bg:d.today?'oklch(0.965 0.02 300 / .45)':'transparent',none:n===0,emptyLabel:d.rel<0?'Nothing posted':d.rel===0?'Nothing yet':'Nothing planned'};}
+    const list=this.dayList(a.acc,d.date);const n=list.length;const f=this.founder;
+    const posts=list.map(p=>{const S=CST[p.status]||CST['To post'];const live=p.status==='Posted';
+      return{time:p.o['Time (IST)']||'–',line:firstLine(p.text),st:p.status,dot:S.dot,sbg:S.bg,sfg:S.fg,open:()=>this.openPost(p.id),
+        canX:!f&&!live,x:stop(()=>this.calRemove(p)),drag:!f&&!live?'true':'false',cur:!f&&!live?'grab':'pointer',
+        start:e=>{this.dragId=p.id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',p.id)}catch(_){}},
+        dropOn:e=>{e.preventDefault();e.stopPropagation();this.calDrop(a,d,p.id);}};});
+    return{posts,all:posts,hasAll:n>0,more:'0',hasMore:false,count:n+' of 3',cfg:n>=3?'var(--ok-ink)':(n===0&&d.rel<=0)?'var(--bad-ink)':'var(--ink-3)',segs:[0,1,2].map(k=>({bg:k<n?(CST[list[k].status]||CST['To post']).dot:'var(--n-soft-2)'})),bg:d.today?'oklch(0.965 0.02 300 / .45)':'transparent',none:n===0,emptyLabel:d.rel<0?'Nothing posted':d.rel===0?'Nothing yet':'Nothing planned',
+      canAdd:!f,add:()=>this.setState({calPick:{acc:a.acc,day:d.date.getTime()},calPickKind:'All'}),over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d,null);}};}
+  // Give the day's posts the account's posting slots in the order shown (live posts keep their time).
+  calPlace(acc,date,order){const ds=dfmt(date);const fixed=new Set(order.filter(p=>p.status==='Posted').map(p=>String(p.o['Time (IST)']||'').trim()));
+    const free=[...(SLOTS[acc]||[]),...EXTRA_SLOTS].filter(t=>!fixed.has(t));const moves=[];let i=0;
+    for(const p of order){if(p.status==='Posted')continue;const t=free[i++];const later=/^later/i.test(p.o.Status||'')||/^later/i.test(p.o.Date||'');
+      if(p.o.Date!==ds||String(p.o['Time (IST)']||'').trim()!==t||later)moves.push({o:p.o,date:ds,time:t,status:later?'Ready to post':''});}
+    return moves;}
+  async calMoves(moves,msg){const prev=await AK.movePosts(moves);if(!prev||!prev.length)return !!prev;
+    this.toast(msg,async()=>{if(await AK.movePosts(prev.map(x=>({o:x.o,date:x.date,time:x.time,status:x.status}))))this.toast('Undone');});return true;}
+  async calDrop(a,d,beforeId){if(this.founder)return;const id=this.dragId;this.dragId=null;if(!id||id===beforeId)return;
+    const p=this.postList().find(x=>x.id===id);if(!p||p.status==='Posted')return;
+    if(p.account!==a.acc){this.toast('Drag a post within its own account’s row.',null,true);return;}
+    const day=this.dayList(a.acc,d.date).filter(x=>x.id!==id);let k=beforeId?day.findIndex(x=>x.id===beforeId):-1;if(k<0)k=day.length;day.splice(k,0,p);
+    await this.calMoves(this.calPlace(a.acc,d.date,day),'Moved');}
+  async calRemove(p){await this.calMoves([{o:p.o,date:p.o.Date,time:'Option',status:p.status==='Scheduled'?'Ready to post':''}],'Taken off the calendar. It’s still in Our posts.');}
+  async calAdd(acc,date,p){const day=this.dayList(acc,date);day.push(p);if(await this.calMoves(this.calPlace(acc,date,day),'Added to the calendar'))this.setState({calPick:null});}
+  calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const date=new Date(pk.day);const acc=pk.acc;const kind=s.calPickKind||'All';
+    let C=this.postList().filter(p=>p.account===acc&&p.status!=='Posted'&&(isOpt(p)||p.status==='Later'));
+    const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;return{label:k==='All'?'All types':k,count:String(k==='All'?C.length:C.filter(p=>p.kind===k).length),go:()=>this.setState({calPickKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});
+    if(kind!=='All')C=C.filter(p=>p.kind===kind);
+    C.sort((x,y)=>(y.o._date?y.o._date.getTime():0)-(x.o._date?x.o._date.getTime():0));
+    const items=C.slice(0,30).map(p=>({id:p.id,type:p.ptype||'Post',line:clip(firstLine(p.text)||p.text,150),when:p.o._date?'Drafted '+AK.dayWord(p.o._date).toLowerCase():'Parked for later',needs:p.q?'Needs a founder answer':'',hasNeeds:!!p.q,add:()=>this.calAdd(acc,date,p)}));
+    return{open:true,title:'Add a post to '+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getDay()]+' '+date.getDate()+' '+AK.MON[date.getMonth()],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
 
   /* ---------- our posts ---------- */
   postCard(p){const s=this.state;const ST={'To post':'warn','Scheduled':'neutral','Posted':'ok','Later':'ghost'};const k=p.id+'c';const cb=this.copyBtn(k,'Copy our version');let actions=[];
@@ -1320,11 +1354,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ok);"></span>Posted</span>
 <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--ink-3);"></span>Scheduled</span>
 <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--warn);"></span>To post</span>
-<span style="display:flex; align-items:center; gap:6px;">5 a day
-<span onMouseEnter="{{ tips.target.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ tips.target.show }}" style="position:relative; display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--ink-3); box-shadow:inset 0 0 0 1px var(--hairline-strong); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); right:-8px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ tips.target.op }}; transform:{{ tips.target.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">Each account aims for 5 posts a day. The five small bars in every day fill up as posts get planned, scheduled and posted.</span></span>
+<span style="display:flex; align-items:center; gap:6px;">3 a day
+<span onMouseEnter="{{ tips.target.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ tips.target.show }}" style="position:relative; display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--ink-3); box-shadow:inset 0 0 0 1px var(--hairline-strong); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); right:-8px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ tips.target.op }}; transform:{{ tips.target.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">Each account posts 3 a day. Press + to pick from the drafts, drag posts to reorder a day or move them to another day, and × to take one off the calendar (it stays in Our posts).</span></span>
 </span>
 </div>
 </div>
+
+<sc-if value="{{ cal.pick.open }}">
+<div style="display:flex; flex-direction:column; gap:10px; padding:var(--s-4); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow-md), inset 0 0 0 1px var(--hairline);">
+<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:var(--fs-md); font-weight:600;">{{ cal.pick.title }}</span><button onClick="{{ cal.pick.close }}" style="margin-left:auto; height:30px; padding:0 12px; border:0; border-radius:var(--r-btn); background:var(--n-soft); font-size:var(--fs-xs); cursor:pointer;">Close</button></div>
+<div style="display:flex; flex-wrap:wrap; gap:6px;"><sc-for list="{{ cal.pick.kinds }}" as="k"><button onClick="{{ k.go }}" style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:var(--r-pill); border:1px solid {{ k.bd }}; background:{{ k.bg }}; color:{{ k.fg }}; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">{{ k.label }} <span style="font-family:var(--font-mono); font-size:var(--fs-3xs);">{{ k.count }}</span></button></sc-for></div>
+<sc-if value="{{ cal.pick.empty }}"><span style="font-size:var(--fs-sm); color:var(--ink-3);">No drafts left for this account. New ones arrive tonight.</span></sc-if>
+<div style="display:flex; flex-direction:column; max-height:420px; overflow-y:auto; border-radius:var(--r-md); box-shadow:inset 0 0 0 1px var(--hairline);">
+<sc-for list="{{ cal.pick.items }}" as="it"><div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--hairline);"><div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px;"><span style="font-size:var(--fs-3xs); color:var(--ink-3);">{{ it.type }} · {{ it.when }}<sc-if value="{{ it.hasNeeds }}"> · {{ it.needs }}</sc-if></span><span style="font-size:var(--fs-sm); line-height:1.4;">{{ it.line }}</span></div><button onClick="{{ it.add }}" style="flex:0 0 auto; height:30px; padding:0 14px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">Add</button></div></sc-for>
+</div>
+</div>
+</sc-if>
 
 <sc-if value="{{ wide }}">
 <div style="border-radius:var(--r-lg); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); overflow:hidden; opacity:{{ E.op }}; transform:{{ E.t }}; transition:opacity 500ms var(--ease) 60ms, transform 500ms var(--ease) 60ms;">
@@ -1343,16 +1388,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span style="display:flex; flex-direction:column; line-height:1.3;"><span style="font-size:var(--fs-sm); font-weight:600;">{{ row.name }}</span><span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:var(--ink-3);">{{ row.handle }}</span></span>
 </div>
 <sc-for list="{{ row.cells }}" as="c">
-<div style="min-height:158px; padding:8px; border-left:1px solid var(--hairline); border-bottom:1px solid var(--hairline); display:flex; flex-direction:column; gap:6px; background:{{ c.bg }};">
+<div onDragOver="{{ c.over }}" onDrop="{{ c.drop }}" style="min-height:158px; padding:8px; border-left:1px solid var(--hairline); border-bottom:1px solid var(--hairline); display:flex; flex-direction:column; gap:6px; background:{{ c.bg }};">
 <div style="display:flex; align-items:center; gap:6px; padding:2px 2px 0;">
 <div style="display:flex; gap:2px; flex:1;"><sc-for list="{{ c.segs }}" as="sg"><span style="flex:1; height:4px; border-radius:2px; background:{{ sg.bg }}; transition:background var(--dur-slow);"></span></sc-for></div>
 <span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:{{ c.cfg }}; white-space:nowrap;">{{ c.count }}</span>
+<sc-if value="{{ c.canAdd }}"><button onClick="{{ c.add }}" title="Add a post to this day" style="width:20px; height:20px; border:0; border-radius:6px; display:grid; place-items:center; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:14px; line-height:1; color:var(--ink); cursor:pointer;">+</button></sc-if>
 </div>
 <sc-for list="{{ c.posts }}" as="p">
-<div onClick="{{ p.open }}" style="display:flex; flex-direction:column; gap:4px; padding:7px 8px; border-radius:9px; background:rgba(255,255,255,.8); box-shadow:inset 0 0 0 1px var(--hairline); cursor:pointer; transition:transform var(--dur) var(--ease), box-shadow var(--dur), background var(--dur);" style-hover="background:#fff; box-shadow:var(--shadow-sm); transform:translateY(-1px);">
+<div onClick="{{ p.open }}" draggable="{{ p.drag }}" onDragStart="{{ p.start }}" onDragOver="{{ c.over }}" onDrop="{{ p.dropOn }}" style="display:flex; flex-direction:column; gap:4px; padding:7px 8px; border-radius:9px; background:rgba(255,255,255,.8); box-shadow:inset 0 0 0 1px var(--hairline); cursor:{{ p.cur }}; transition:transform var(--dur) var(--ease), box-shadow var(--dur), background var(--dur);" style-hover="background:#fff; box-shadow:var(--shadow-sm); transform:translateY(-1px);">
 <div style="display:flex; align-items:center; gap:4px;">
 <span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:var(--ink-2);">{{ p.time }}</span>
 <span style="margin-left:auto; display:inline-flex; align-items:center; height:16px; padding:0 5px; border-radius:4px; font-size:9.5px; font-weight:600; white-space:nowrap; background:{{ p.sbg }}; color:{{ p.sfg }};">{{ p.st }}</span>
+<sc-if value="{{ p.canX }}"><button onClick="{{ p.x }}" title="Take off the calendar (keeps the post)" style="width:16px; height:16px; border:0; border-radius:4px; display:grid; place-items:center; background:transparent; font-size:13px; line-height:1; color:var(--ink-3); cursor:pointer;" style-hover="background:var(--n-soft); color:var(--ink);">×</button></sc-if>
 </div>
 <span style="font-size:11.5px; line-height:1.35; color:var(--ink); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ p.line }}</span>
 </div>

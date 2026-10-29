@@ -71,7 +71,7 @@ const store={
 const S={
   mcp:undefined, pub:false, raw:{}, at:{}, err:{}, busy:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
-  postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, pausedLocal:null,
+  postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, pausedLocal:null, moveLocal:{},
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 let version=0;
@@ -209,6 +209,7 @@ function build(){
   M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]||r["Posted link"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
     const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}
     const st=S.statusLocal[r._row];if(st&&(st.status==="Deleted"||st.was==="Deleted"||!r["Posted link"])&&Date.now()-st.at<6e5)r.Status=st.status;
+    const mv=S.moveLocal[r._row];if(mv&&!r["Posted link"]&&Date.now()-mv.at<6e5){r.Date=mv.date;r["Time (IST)"]=mv.time;if(mv.status)r.Status=mv.status;r._date=parseDate(r.Date)}
     return r}).filter(r=>r.Status!=="Deleted"):[];
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
   M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
@@ -567,6 +568,23 @@ async function undeletePost(row,prev){
     if(S.pub)goLive();else reloadRange("ours");return true;
   }catch(e){toast("Couldn't undo: "+(e&&e.message||e),true);return false}
 }
+/* Calendar: put posts on a day and time, or time "Option" to take one off the calendar (it stays a draft).
+   moves = [{o, date:"D Mon YYYY", time, status?}]. Returns the previous values (for Undo) or false. */
+async function movePosts(moves){
+  if(!moves.length)return [];
+  if(S.busy.has("move"))return false;
+  S.busy.add("move");let ok=true;
+  const prev=moves.map(m=>({o:m.o,date:m.o.Date,time:m.o["Time (IST)"]||"Option",status:m.status?m.o.Status:""}));
+  moves.forEach(m=>{S.moveLocal[m.o._row]={date:m.date,time:m.time,status:m.status||"",at:Date.now()}});build();emit();
+  try{
+    for(const m of moves){
+      if(S.mcp){await putCells("'Our Posts'!B"+m.o._row+":C"+m.o._row,[[m.date,m.time]]);if(m.status)await putCells("'Our Posts'!O"+m.o._row,[[m.status]])}
+      else await scriptCall({action:"movePost",row:m.o._row,snippet:snip(m.o["Our version"]),date:m.date,time:m.time,status:m.status||""});
+    }
+    if(S.pub)goLive();else reloadRange("ours");
+  }catch(e){ok=false;moves.forEach(m=>delete S.moveLocal[m.o._row]);build();toast("Couldn't save the calendar change: "+(e&&e.message||e),true)}
+  S.busy.delete("move");emit();return ok?prev:false;
+}
 /* Add a post by hand (one the drafts didn't suggest). With a link it's Posted and the tracker follows it. */
 async function addPost(f){
   if(S.busy.has("add"))return false;
@@ -754,7 +772,7 @@ window.AK={
   num,fmtK,safeUrl,xUrl,host,parseDate,cellDate,sheetSerial,fmtSerial,ago,plain,firstName,norm,median,weekStart,sameDay,dayWord,folderUrl,
   bucket,fundKind,sendable,messages,statusCells,undoCells,write,canEdit,canRestore,
   postStage,minutesOf,linkKey,originalFor,copiesOf,rate,ourEng,isNew,newPosts,markSeen,ourPostLink,
-  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,
+  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,movePosts,
   typeStats,copyNext,founderAsks,trackedPosts,whyFor,patterns,weekGrid,dmResults,viewsOf,bigFirst,compFor,
 };
 start();

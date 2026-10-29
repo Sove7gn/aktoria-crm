@@ -28,6 +28,13 @@ const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Sched
 // Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
 const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
 const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
+// Calendar (29 Oct): only posts planned to go live show (3 posting slots per account a day); drafts whose Time is
+// "Option" stay off it until someone adds them with +. Times follow the account's slots in the order shown.
+const SLOTS={Karan:['7:30 PM','9:45 PM','11:00 PM'],Shreenabh:['7:45 PM','10:15 PM','11:15 PM'],Aktoria:['8:00 PM','10:30 PM','11:30 PM']};
+const EXTRA_SLOTS=['12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM'];
+// An option = a draft not placed on a slot yet: Time "Option" or blank. Posted and scheduled posts always show.
+const isOpt=p=>p.status!=='Posted'&&p.status!=='Scheduled'&&/^(option)?$/i.test(String(p.o['Time (IST)']||'').trim());
+const dfmt=d=>d.getDate()+' '+AK.MON[d.getMonth()]+' '+d.getFullYear();
 const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
 /* sheet <-> design */
@@ -73,7 +80,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -406,12 +413,39 @@ class Component extends DCLogic {
     const days=DOW.map((d,i)=>{const dt=new Date(start.getTime()+i*AK.DAY);const today=AK.sameDay(dt,now);const rel=Math.round((dt-t0)/AK.DAY);const sel=s.calDay===i;return{dow:d,num:String(dt.getDate()),mon:MON[dt.getMonth()],date:dt,rel,today,numBg:today?'var(--ink)':'transparent',numFg:today?'#fff':'var(--ink)',hbg:today?'oklch(0.965 0.02 300 / .55)':'transparent',pick:()=>this.setState({calDay:i}),chipBg:sel?'var(--ink)':'rgba(255,255,255,.75)',chipFg:sel?'#fff':'var(--ink)',chipSub:sel?'rgba(255,255,255,.7)':'var(--ink-3)',chipSh:sel?'0 6px 16px -6px rgba(19,20,24,.45)':'var(--shadow-xs), inset 0 0 0 1px var(--hairline)',todayDot:today?(sel?'#fff':'var(--in)'):'transparent'};});
     const rows=this.accs().map(a=>({...a,...avatar(avName(a.name)),cells:days.map(d=>this.calCell(a,d))}));
     const sd=days[s.calDay]||days[0];const dow=(now.getDay()+6)%7;
-    return{days,rows,label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0,calDay:dow}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',dayRows:rows.map(r=>({...r,cell:r.cells[s.calDay]||r.cells[0]})),selDay:sd.dow+' '+sd.num+' '+sd.mon};}
+    return{days,rows,label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0,calDay:dow}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',dayRows:rows.map(r=>({...r,cell:r.cells[s.calDay]||r.cells[0]})),selDay:sd.dow+' '+sd.num+' '+sd.mon,pick:this.calPickVals()};}
+  dayList(acc,date){return this.postList().filter(p=>p.account===acc&&p.status!=='Later'&&!isOpt(p)&&p.o._date&&AK.sameDay(p.o._date,date)).sort((x,y)=>AK.minutesOf(x.o['Time (IST)'])-AK.minutesOf(y.o['Time (IST)']));}
   calCell(a,d){
-    const list=this.postList().filter(p=>p.account===a.acc&&p.status!=='Later'&&p.o._date&&AK.sameDay(p.o._date,d.date)).sort((x,y)=>AK.minutesOf(x.o['Time (IST)'])-AK.minutesOf(y.o['Time (IST)']));
-    const n=list.length;
-    const posts=list.map(p=>{const S=CST[p.status]||CST['To post'];return{time:p.o['Time (IST)']||'–',line:firstLine(p.text),st:p.status,dot:S.dot,sbg:S.bg,sfg:S.fg,open:()=>this.openPost(p.id)};});
-    return{posts:posts.slice(0,3),all:posts,hasAll:n>0,more:String(Math.max(0,n-3)),hasMore:n>3,count:n+' of 5',cfg:n>=5?'var(--ok-ink)':(n===0&&d.rel<=0)?'var(--bad-ink)':'var(--ink-3)',segs:[0,1,2,3,4].map(k=>({bg:k<n?(CST[list[k].status]||CST['To post']).dot:'var(--n-soft-2)'})),bg:d.today?'oklch(0.965 0.02 300 / .45)':'transparent',none:n===0,emptyLabel:d.rel<0?'Nothing posted':d.rel===0?'Nothing yet':'Nothing planned'};}
+    const list=this.dayList(a.acc,d.date);const n=list.length;const f=this.founder;
+    const posts=list.map(p=>{const S=CST[p.status]||CST['To post'];const live=p.status==='Posted';
+      return{time:p.o['Time (IST)']||'–',line:firstLine(p.text),st:p.status,dot:S.dot,sbg:S.bg,sfg:S.fg,open:()=>this.openPost(p.id),
+        canX:!f&&!live,x:stop(()=>this.calRemove(p)),drag:!f&&!live?'true':'false',cur:!f&&!live?'grab':'pointer',
+        start:e=>{this.dragId=p.id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',p.id)}catch(_){}},
+        dropOn:e=>{e.preventDefault();e.stopPropagation();this.calDrop(a,d,p.id);}};});
+    return{posts,all:posts,hasAll:n>0,more:'0',hasMore:false,count:n+' of 3',cfg:n>=3?'var(--ok-ink)':(n===0&&d.rel<=0)?'var(--bad-ink)':'var(--ink-3)',segs:[0,1,2].map(k=>({bg:k<n?(CST[list[k].status]||CST['To post']).dot:'var(--n-soft-2)'})),bg:d.today?'oklch(0.965 0.02 300 / .45)':'transparent',none:n===0,emptyLabel:d.rel<0?'Nothing posted':d.rel===0?'Nothing yet':'Nothing planned',
+      canAdd:!f,add:()=>this.setState({calPick:{acc:a.acc,day:d.date.getTime()},calPickKind:'All'}),over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d,null);}};}
+  // Give the day's posts the account's posting slots in the order shown (live posts keep their time).
+  calPlace(acc,date,order){const ds=dfmt(date);const fixed=new Set(order.filter(p=>p.status==='Posted').map(p=>String(p.o['Time (IST)']||'').trim()));
+    const free=[...(SLOTS[acc]||[]),...EXTRA_SLOTS].filter(t=>!fixed.has(t));const moves=[];let i=0;
+    for(const p of order){if(p.status==='Posted')continue;const t=free[i++];const later=/^later/i.test(p.o.Status||'')||/^later/i.test(p.o.Date||'');
+      if(p.o.Date!==ds||String(p.o['Time (IST)']||'').trim()!==t||later)moves.push({o:p.o,date:ds,time:t,status:later?'Ready to post':''});}
+    return moves;}
+  async calMoves(moves,msg){const prev=await AK.movePosts(moves);if(!prev||!prev.length)return !!prev;
+    this.toast(msg,async()=>{if(await AK.movePosts(prev.map(x=>({o:x.o,date:x.date,time:x.time,status:x.status}))))this.toast('Undone');});return true;}
+  async calDrop(a,d,beforeId){if(this.founder)return;const id=this.dragId;this.dragId=null;if(!id||id===beforeId)return;
+    const p=this.postList().find(x=>x.id===id);if(!p||p.status==='Posted')return;
+    if(p.account!==a.acc){this.toast('Drag a post within its own account’s row.',null,true);return;}
+    const day=this.dayList(a.acc,d.date).filter(x=>x.id!==id);let k=beforeId?day.findIndex(x=>x.id===beforeId):-1;if(k<0)k=day.length;day.splice(k,0,p);
+    await this.calMoves(this.calPlace(a.acc,d.date,day),'Moved');}
+  async calRemove(p){await this.calMoves([{o:p.o,date:p.o.Date,time:'Option',status:p.status==='Scheduled'?'Ready to post':''}],'Taken off the calendar. It’s still in Our posts.');}
+  async calAdd(acc,date,p){const day=this.dayList(acc,date);day.push(p);if(await this.calMoves(this.calPlace(acc,date,day),'Added to the calendar'))this.setState({calPick:null});}
+  calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const date=new Date(pk.day);const acc=pk.acc;const kind=s.calPickKind||'All';
+    let C=this.postList().filter(p=>p.account===acc&&p.status!=='Posted'&&(isOpt(p)||p.status==='Later'));
+    const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;return{label:k==='All'?'All types':k,count:String(k==='All'?C.length:C.filter(p=>p.kind===k).length),go:()=>this.setState({calPickKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});
+    if(kind!=='All')C=C.filter(p=>p.kind===kind);
+    C.sort((x,y)=>(y.o._date?y.o._date.getTime():0)-(x.o._date?x.o._date.getTime():0));
+    const items=C.slice(0,30).map(p=>({id:p.id,type:p.ptype||'Post',line:clip(firstLine(p.text)||p.text,150),when:p.o._date?'Drafted '+AK.dayWord(p.o._date).toLowerCase():'Parked for later',needs:p.q?'Needs a founder answer':'',hasNeeds:!!p.q,add:()=>this.calAdd(acc,date,p)}));
+    return{open:true,title:'Add a post to '+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getDay()]+' '+date.getDate()+' '+AK.MON[date.getMonth()],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
 
   /* ---------- our posts ---------- */
   postCard(p){const s=this.state;const ST={'To post':'warn','Scheduled':'neutral','Posted':'ok','Later':'ghost'};const k=p.id+'c';const cb=this.copyBtn(k,'Copy our version');let actions=[];

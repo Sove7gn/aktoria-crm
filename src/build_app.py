@@ -106,6 +106,36 @@ rep('<a href="#" onClick="{{ openSheet }}"',
     '<button onClick="{{ refresh }}" title="Reload the sheet now and pull new numbers and replies from X" style="display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">Refresh now</button>\n'
     '<a href="#" onClick="{{ openSheet }}"')
 
+# ---------- calendar: 3 a day, x to take a post off, + to add one, drag to reorder or move ----------
+rep('<span style="display:flex; align-items:center; gap:6px;">5 a day\n', '<span style="display:flex; align-items:center; gap:6px;">3 a day\n')
+rep('Each account aims for 5 posts a day. The five small bars in every day fill up as posts get planned, scheduled and posted.',
+    'Each account posts 3 a day. Press + to pick from the drafts, drag posts to reorder a day or move them to another day, and × to take one off the calendar (it stays in Our posts).')
+rep('<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:{{ c.cfg }}; white-space:nowrap;">{{ c.count }}</span>\n</div>\n<sc-for list="{{ c.posts }}" as="p">\n<div onClick="{{ p.open }}" style="display:flex; flex-direction:column; gap:4px; padding:7px 8px; border-radius:9px; background:rgba(255,255,255,.8); box-shadow:inset 0 0 0 1px var(--hairline); cursor:pointer;',
+    '<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:{{ c.cfg }}; white-space:nowrap;">{{ c.count }}</span>\n'
+    '<sc-if value="{{ c.canAdd }}"><button onClick="{{ c.add }}" title="Add a post to this day" style="width:20px; height:20px; border:0; border-radius:6px; display:grid; place-items:center; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:14px; line-height:1; color:var(--ink); cursor:pointer;">+</button></sc-if>\n'
+    '</div>\n<sc-for list="{{ c.posts }}" as="p">\n'
+    '<div onClick="{{ p.open }}" draggable="{{ p.drag }}" onDragStart="{{ p.start }}" onDragOver="{{ c.over }}" onDrop="{{ p.dropOn }}" style="display:flex; flex-direction:column; gap:4px; padding:7px 8px; border-radius:9px; background:rgba(255,255,255,.8); box-shadow:inset 0 0 0 1px var(--hairline); cursor:{{ p.cur }};')
+rep('<span style="margin-left:auto; display:inline-flex; align-items:center; height:16px; padding:0 5px; border-radius:4px; font-size:9.5px; font-weight:600; white-space:nowrap; background:{{ p.sbg }}; color:{{ p.sfg }};">{{ p.st }}</span>\n</div>\n<span style="font-size:11.5px;',
+    '<span style="margin-left:auto; display:inline-flex; align-items:center; height:16px; padding:0 5px; border-radius:4px; font-size:9.5px; font-weight:600; white-space:nowrap; background:{{ p.sbg }}; color:{{ p.sfg }};">{{ p.st }}</span>\n'
+    '<sc-if value="{{ p.canX }}"><button onClick="{{ p.x }}" title="Take off the calendar (keeps the post)" style="width:16px; height:16px; border:0; border-radius:4px; display:grid; place-items:center; background:transparent; font-size:13px; line-height:1; color:var(--ink-3); cursor:pointer;" style-hover="background:var(--n-soft); color:var(--ink);">×</button></sc-if>\n'
+    '</div>\n<span style="font-size:11.5px;')
+rep('<div style="min-height:158px; padding:8px; border-left:1px solid var(--hairline);',
+    '<div onDragOver="{{ c.over }}" onDrop="{{ c.drop }}" style="min-height:158px; padding:8px; border-left:1px solid var(--hairline);')
+rep('<sc-if value="{{ wide }}">\n<div style="border-radius:var(--r-lg); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); overflow:hidden; opacity:{{ E.op }}; transform:{{ E.t }}; transition:opacity 500ms var(--ease) 60ms, transform 500ms var(--ease) 60ms;">\n<div style="overflow-x:auto;">\n<div style="display:grid; grid-template-columns:140px repeat(7, minmax(112px, 1fr)); min-width:930px;">',
+    '<sc-if value="{{ cal.pick.open }}">\n'
+    '<div style="display:flex; flex-direction:column; gap:10px; padding:var(--s-4); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow-md), inset 0 0 0 1px var(--hairline);">\n'
+    '<div style="display:flex; align-items:center; gap:10px;"><span style="font-size:var(--fs-md); font-weight:600;">{{ cal.pick.title }}</span>'
+    '<button onClick="{{ cal.pick.close }}" style="margin-left:auto; height:30px; padding:0 12px; border:0; border-radius:var(--r-btn); background:var(--n-soft); font-size:var(--fs-xs); cursor:pointer;">Close</button></div>\n'
+    '<div style="display:flex; flex-wrap:wrap; gap:6px;"><sc-for list="{{ cal.pick.kinds }}" as="k"><button onClick="{{ k.go }}" style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:var(--r-pill); border:1px solid {{ k.bd }}; background:{{ k.bg }}; color:{{ k.fg }}; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">{{ k.label }} <span style="font-family:var(--font-mono); font-size:var(--fs-3xs);">{{ k.count }}</span></button></sc-for></div>\n'
+    '<sc-if value="{{ cal.pick.empty }}"><span style="font-size:var(--fs-sm); color:var(--ink-3);">No drafts left for this account. New ones arrive tonight.</span></sc-if>\n'
+    '<div style="display:flex; flex-direction:column; max-height:420px; overflow-y:auto; border-radius:var(--r-md); box-shadow:inset 0 0 0 1px var(--hairline);">\n'
+    '<sc-for list="{{ cal.pick.items }}" as="it"><div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--hairline);">'
+    '<div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px;"><span style="font-size:var(--fs-3xs); color:var(--ink-3);">{{ it.type }} · {{ it.when }}<sc-if value="{{ it.hasNeeds }}"> · {{ it.needs }}</sc-if></span>'
+    '<span style="font-size:var(--fs-sm); line-height:1.4;">{{ it.line }}</span></div>'
+    '<button onClick="{{ it.add }}" style="flex:0 0 auto; height:30px; padding:0 14px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">Add</button></div></sc-for>\n'
+    '</div>\n</div>\n</sc-if>\n\n'
+    '<sc-if value="{{ wide }}">\n<div style="border-radius:var(--r-lg); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); overflow:hidden; opacity:{{ E.op }}; transform:{{ E.t }}; transition:opacity 500ms var(--ease) 60ms, transform 500ms var(--ease) 60ms;">\n<div style="overflow-x:auto;">\n<div style="display:grid; grid-template-columns:140px repeat(7, minmax(112px, 1fr)); min-width:930px;">')
+
 # ---------- send today ----------
 rep('<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>',
     '<span style="font-size:var(--fs-lg); font-weight:600;">{{ send.clearTitle }}</span>')
