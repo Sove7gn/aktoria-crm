@@ -14,7 +14,7 @@ const PIPE_TAB="'DM Pipeline'";
 const RANGES={
   pipeline:"'DM Pipeline'!A2:AJ1000",
   targets:"'Target Accounts'!A3:N300",
-  stats:"'DM Templates'!A3:J6",
+  stats:"'DM Templates'!A3:K6",  // K4 = "DMs paused" switch
   templates:"'DM Templates'!A10:M40",
   comps:"'Competitors'!A3:O60",
   people:"'Competitor People'!A3:H200",
@@ -71,7 +71,7 @@ const store={
 const S={
   mcp:undefined, pub:false, raw:{}, at:{}, err:{}, busy:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
-  postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{},
+  postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, pausedLocal:null,
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 let version=0;
@@ -506,6 +506,24 @@ async function saveScheduled(p,on,opt){
   }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
   S.busy.delete(p._key);emit();return ok;
 }
+/* Pause / resume all DMs: one switch, 'DM Templates'!K4. While it's on, the sheet's Next action says "Paused" for
+   every unsent or waiting row, so nothing shows as ready to send or follow-up due (replies still show). */
+function dmsPaused(){
+  const l=S.pausedLocal;if(l&&Date.now()-l.at<6e5)return l.on;
+  return String((M.stats[0]||{})["DMs paused"]||"").toUpperCase()==="TRUE";
+}
+async function savePaused(on){
+  if(S.busy.has("pause"))return false;
+  S.busy.add("pause");emit();let ok=false;
+  try{
+    if(S.mcp)await putCells("'DM Templates'!K4",[[!!on]]);
+    else await scriptCall({action:"pause",on:!!on});
+    S.pausedLocal={on:!!on,at:Date.now()};ok=true;
+    reloadRange("stats");reloadRange("pipeline");if(S.pub)publicLoad();
+    toast(on?"DMs paused. Nothing shows as ready to send until you press Resume.":"DMs are back on. Send today fills up again.");
+  }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
+  S.busy.delete("pause");emit();return ok;
+}
 /* Undo on claude.ai: put the exact cells back (the public page's Apps Script has no action that can do this). */
 const canRestore=()=>!!S.mcp;
 async function restorePost(p,prevStatus,prevLink){
@@ -673,7 +691,7 @@ window.AK={
   num,fmtK,safeUrl,xUrl,host,parseDate,cellDate,sheetSerial,fmtSerial,ago,plain,firstName,norm,median,weekStart,sameDay,dayWord,folderUrl,
   bucket,fundKind,sendable,messages,statusCells,undoCells,write,canEdit,canRestore,
   postStage,minutesOf,linkKey,originalFor,copiesOf,rate,ourEng,isNew,newPosts,markSeen,ourPostLink,
-  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,
+  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,
   typeStats,copyNext,founderAsks,trackedPosts,whyFor,patterns,weekGrid,dmResults,viewsOf,bigFirst,compFor,
 };
 start();

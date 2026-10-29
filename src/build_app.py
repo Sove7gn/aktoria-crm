@@ -4,7 +4,7 @@ The design markup, styles and runtime stay as designed. This script only:
 - adds the document head bits (title, robots), data.js and the page logic (logic.js, inlined);
 - replaces the design's sample-data script with a one-line hand-off to that logic;
 - swaps the few hard-coded sample texts in the template for bindings, and adds the few slots the real data needs
-  (connection notice, DM pause note, "show more" buttons, empty states, save-on-blur for notes and call date).
+  (connection notice, DM pause note and Pause/Resume button, "show more" buttons, empty states, save-on-blur for notes and call date).
 Every replacement must match exactly once, so a changed design fails loudly instead of silently.
 """
 import os, sys
@@ -73,10 +73,13 @@ rep('{{ g.v }} <span style="color:var(--ink-4);">/ 1,000</span>', '{{ g.v }} <sp
 rep('<span style="font-size:var(--fs-xs); color:var(--ink-3);">4 this week. Goal is 5.</span>', '<span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ home.inqText }}</span>')
 
 # ---------- send today ----------
+rep('<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>',
+    '<span style="font-size:var(--fs-lg); font-weight:600;">{{ send.clearTitle }}</span>')
 rep('<sc-if value="{{ is.send }}">\n<sc-if value="{{ send.hasRes }}">',
     '<sc-if value="{{ is.send }}">\n'
     '<div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:var(--r-lg); background:var(--glass-faint); border:1px dashed var(--hairline-strong); font-size:var(--fs-sm); color:var(--ink-2); opacity:{{ E.op }}; transition:opacity 500ms var(--ease);">'
-    '<span style="width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:var(--ink-4);"></span><span>{{ send.hold }}</span></div>\n'
+    '<span style="width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:{{ send.holdDot }};"></span><span style="flex:1 1 auto;">{{ send.hold }}</span>'
+    '<button onClick="{{ send.togglePause }}" style="flex:0 0 auto; padding:6px 12px; border-radius:var(--r-md); border:1px solid var(--hairline-strong); background:#fff; color:var(--ink); font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ send.pauseLabel }}</button></div>\n'
     '<sc-if value="{{ send.hasRes }}">')
 rep('<span style="font-size:var(--fs-xs); color:var(--ink-3);">Yesterday · Wed 28 Oct</span>', '<span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ send.res.day }}</span>')
 rep('line-height:1; font-variant-numeric:tabular-nums;">52</span><span style="font-size:var(--fs-sm); color:var(--ink-2);">sent</span>',
@@ -91,7 +94,7 @@ rep('<span style="font-size:var(--fs-sm); font-weight:500; color:var(--ink-2);">
 rep('Seed and pre-seed companies rarely have budget for remote operators yet. They stay out of the list unless you choose Send anyway.',
     'Seed and pre-seed companies rarely have budget for remote operators yet, and unclear funding is checked first. They stay out of the list unless you choose Send anyway.')
 rep('<span style="font-size:var(--fs-sm); color:var(--ink-3); max-width:340px;">Tomorrow’s list appears after the sheet updates at 7:00.</span>',
-    '<span style="font-size:var(--fs-sm); color:var(--ink-3); max-width:340px;">New people show up here as soon as the sheet marks them ready to send.</span>')
+    '<span style="font-size:var(--fs-sm); color:var(--ink-3); max-width:340px;">{{ send.clearText }}</span>')
 
 # ---------- pipeline ----------
 rep('<option value="Any channel">Any channel</option><option value="X">X</option><option value="LinkedIn">LinkedIn</option>',

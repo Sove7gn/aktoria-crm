@@ -34,7 +34,7 @@ const OWNERS=['Everyone','Karan','Shreenabh','Aktoria page'];
 const TIPS=['fq','pilot','cant','fund','fit','likely','verdict','target','eng1k','week','dms','rank','groups','skip'];
 const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Scheduled:{dot:'var(--ink-3)',bg:'var(--n-soft)',fg:'var(--ink-2)'},'To post':{dot:'var(--warn)',bg:'var(--warn-soft)',fg:'var(--warn-ink)'}};
 // Founder call, 29 Oct 2026: DMs wait until the accounts have presence and the Forbes piece is out.
-const DM_HOLD='DMs are paused until the Forbes piece is out. The list is ready for when we start again.';
+const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
 /* sheet <-> design */
 const SHEET2STAGE={'To send':'To send','Sent':'Sent','FU1 sent':'Follow-up 1 sent','FU2 sent':'Follow-up 2 sent','Replied':'Replied','Call booked':'Call booked','Customer':'Customer','Not now':'Closed','No reply':'Closed','Do not contact':'Closed'};
@@ -119,6 +119,7 @@ class Component extends DCLogic {
   own(account){const o=this.state.owner;return o==='Everyone'||accOf(o)===account;}
   canSend(p){return p.sendable||!!this.state.anyway[p.id];}
   lists(P){const B=id=>AK.bucket(id);
+    if(AK.dmsPaused())P=P.filter(p=>p.stage==='Replied'||p.stage==='Call booked'||p.act==='Reply now');
     return {fu:P.filter(p=>p.due),ts:P.filter(p=>B('send').test(p.act)&&this.canSend(p)).sort(byPri),skip:P.filter(p=>B('send').test(p.act)&&!this.canSend(p)).sort(byPri),
       find:P.filter(p=>B('research').test(p.act)).sort(byPri),noreply:P.filter(p=>B('noreply').test(p.act)).sort(byPri),
       rep:P.filter(p=>p.stage==='Replied'||p.act==='Reply now').sort(byPri),calls:P.filter(p=>p.stage==='Call booked').sort(byPri)};}
@@ -219,8 +220,9 @@ class Component extends DCLogic {
       if(rep[0])h={...h,next:'Reply to '+rep[0].name+' at '+rep[0].company+' first.'+(rep.length>1?' '+(rep.length-1)+' other '+(rep.length-1===1?'reply is':'replies are')+' waiting.':''),cta:'Open reply',go:()=>this.openC(rep[0].id)};
       else if(fu[0])h={...h,next:'No replies waiting. '+fu.length+' follow-up'+(fu.length===1?' is':'s are')+' due, starting with '+fu[0].name+'.',cta:'Go to Send today',go:()=>this.go('send')};
       else{const today=this.ownPosts().filter(p=>p.status!=='Later'&&p.o._date&&AK.sameDay(p.o._date,new Date()));
-        h={...h,next:'No replies waiting. DMs are paused for now, so today is about posts: '+today.length+' planned for today.',cta:'Open Calendar',go:()=>this.go('calendar')};}}
-    if(page==='send'){h.title='Send today';h.next=fu.length?fu.length+' follow-ups are due. Send those first, then '+ts.length+' first messages.':ts.length+' first messages are ready, best fit first.';h.cta=fu.length?'Start with '+fu[0].first:'';h.go=fu[0]?()=>this.openC(fu[0].id):null;}
+        h={...h,next:'No replies waiting. '+(AK.dmsPaused()?'DMs are paused for now, so today':'Today')+' is about posts: '+today.length+' planned for today.',cta:'Open Calendar',go:()=>this.go('calendar')};}}
+    if(page==='send'&&AK.dmsPaused()){h.title='Send today';h.next='DMs are paused. Press Resume DMs when you want to start again.';}
+    else if(page==='send'){h.title='Send today';h.next=fu.length?fu.length+' follow-ups are due. Send those first, then '+ts.length+' first messages.':ts.length+' first messages are ready, best fit first.';h.cta=fu.length?'Start with '+fu[0].first:'';h.go=fu[0]?()=>this.openC(fu[0].id):null;}
     if(page==='pipeline'){const sent=P.filter(p=>['Sent','Follow-up 1 sent','Follow-up 2 sent'].includes(p.stage)).length;
       h.next=rep.length?rep.length+' people replied and are waiting on us. Calls come next: '+calls.length+' booked.':P.length+' people in the pipeline. '+sent+' have a message out and nobody is waiting on a reply from us.';h.cta=rep.length?'Open replies':'';h.go=rep.length?()=>this.go('inbox'):null;}
     if(page==='inbox'){h.title='Replies and calls';h.next=rep[0]?'Reply to '+rep[0].first+' at '+rep[0].company+'. Then prep for '+(calls[0]?calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:''):'your next call')+'.':calls[0]?'Nobody is waiting on a reply. Prep for '+calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:'')+'.':'Nobody is waiting on a reply.';h.cta=rep[0]?'Reply to '+rep[0].first:calls[0]?'Prep the call':'';h.go=rep[0]?()=>this.openC(rep[0].id):calls[0]?()=>this.openC(calls[0].id):null;}
@@ -334,7 +336,7 @@ class Component extends DCLogic {
       const tgt=a=>num((AK.M.stats.find(x=>x.Account===a)||{})['Daily target'])||30;
       acc=Object.keys(AK.HANDLES).map(a=>({a,n:R.sent.filter(c=>c.Owner===a).length})).filter(x=>x.n>0).map(x=>{const of=tgt(x.a);const name=ownerName(x.a);return{name,...avatar(avName(name)),done:x.n,of,label:x.n+' of '+of,w:E?Math.min(100,x.n/of*100)+'%':'0%',bar:x.n>=of?'var(--ok)':'var(--out)'};});}
     const so=!!s.more.skip;const early=L.skip.filter(p=>p.fund==='early').length;
-    return{groups,noDM:false,hasGroups:groups.length>0,allClear:groups.length===0,acc,hasRes:!!res&&(res.sent!=='0'||res.hasCant),res:res||{},hold:DM_HOLD,skipOpen:so,skipN:String(L.skip.length),skipLabel:'Skipped for now: '+L.skip.length+(early===L.skip.length?' seed-stage people':' seed-stage or unclear-funding people'),hasSkip:L.skip.length>0,skipRot:so?'rotate(90deg)':'none',skipCta:so?'Hide':'Show',toggleSkip:()=>this.setState(st=>({more:{...st.more,skip:!st.more.skip}})),skipRows:L.skip.slice(0,s.more.skipAll?999:20).map((p,i)=>this.row(p,i,'skip')),showEveryone:()=>this.setOwner('Everyone')};}
+    return{groups,noDM:false,hasGroups:groups.length>0,allClear:groups.length===0,acc,hasRes:!!res&&(res.sent!=='0'||res.hasCant),res:res||{},hold:AK.dmsPaused()?DM_HOLD.on:DM_HOLD.off,clearTitle:AK.dmsPaused()?'DMs are paused':'Everything for today is sent',clearText:AK.dmsPaused()?'Nothing to send while DMs are paused. Press Resume DMs above to bring the list back.':'New people show up here as soon as the sheet marks them ready to send.',pauseLabel:AK.S.busy.has('pause')?'Saving…':AK.dmsPaused()?'Resume DMs':'Pause DMs',togglePause:()=>{if(AK.canEdit())AK.savePaused(!AK.dmsPaused());},holdDot:AK.dmsPaused()?'var(--warn, #b7791f)':'var(--ok)',skipOpen:so,skipN:String(L.skip.length),skipLabel:'Skipped for now: '+L.skip.length+(early===L.skip.length?' seed-stage people':' seed-stage or unclear-funding people'),hasSkip:L.skip.length>0,skipRot:so?'rotate(90deg)':'none',skipCta:so?'Hide':'Show',toggleSkip:()=>this.setState(st=>({more:{...st.more,skip:!st.more.skip}})),skipRows:L.skip.slice(0,s.more.skipAll?999:20).map((p,i)=>this.row(p,i,'skip')),showEveryone:()=>this.setOwner('Everyone')};}
   inboxVals(P){const L=this.lists(P);
     const groups=[this.group('rep','Reply now','They wrote back. Answer within a day.',L.rep,'reply'),this.group('calls','Calls coming up','Open their card to prep: what they said, why now, and your notes.',L.calls,'call')].filter(g=>g.show);
     return{groups,noDM:false,hasGroups:groups.length>0,allClear:groups.length===0,showEveryone:()=>this.setOwner('Everyone')};}
@@ -906,7 +908,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </sc-if>
 
 <sc-if value="{{ is.send }}">
-<div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:var(--r-lg); background:var(--glass-faint); border:1px dashed var(--hairline-strong); font-size:var(--fs-sm); color:var(--ink-2); opacity:{{ E.op }}; transition:opacity 500ms var(--ease);"><span style="width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:var(--ink-4);"></span><span>{{ send.hold }}</span></div>
+<div style="display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:var(--r-lg); background:var(--glass-faint); border:1px dashed var(--hairline-strong); font-size:var(--fs-sm); color:var(--ink-2); opacity:{{ E.op }}; transition:opacity 500ms var(--ease);"><span style="width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:{{ send.holdDot }};"></span><span style="flex:1 1 auto;">{{ send.hold }}</span><button onClick="{{ send.togglePause }}" style="flex:0 0 auto; padding:6px 12px; border-radius:var(--r-md); border:1px solid var(--hairline-strong); background:#fff; color:var(--ink); font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ send.pauseLabel }}</button></div>
 <sc-if value="{{ send.hasRes }}">
 <div style="display:flex; flex-wrap:wrap; gap:var(--s-5) var(--s-8); padding:var(--s-5); border-radius:var(--r-lg); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); opacity:{{ E.op }}; transform:{{ E.t }}; transition:opacity 500ms var(--ease), transform 500ms var(--ease);">
 <div style="display:flex; flex-direction:column; gap:8px; min-width:110px;">
@@ -1007,8 +1009,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <sc-if value="{{ send.allClear }}">
 <div style="display:flex; flex-direction:column; align-items:center; gap:10px; padding:var(--s-9) var(--s-5); text-align:center; border-radius:var(--r-lg); background:var(--glass); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi);">
 <span style="width:52px; height:52px; border-radius:50%; display:grid; place-items:center; background:var(--ok-soft); color:var(--ok-ink); font-size:20px;">✓</span>
-<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>
-<span style="font-size:var(--fs-sm); color:var(--ink-3); max-width:340px;">New people show up here as soon as the sheet marks them ready to send.</span>
+<span style="font-size:var(--fs-lg); font-weight:600;">{{ send.clearTitle }}</span>
+<span style="font-size:var(--fs-sm); color:var(--ink-3); max-width:340px;">{{ send.clearText }}</span>
 </div>
 </sc-if>
 </sc-if>
