@@ -26,7 +26,7 @@ const RANGES={
   accounts:"'Our Accounts'!A3:H6",
   weekly:"'Our Accounts'!A8:E40",
   tracking:"'Post Tracking'!A3:J5000",
-  engagers:"'Post Engagers'!A3:Q2000",
+  engagers:"'Post Engagers'!A3:R2000",  // R = "Our reply", written by the aktoria-engager-replies task
 };
 // The sheet's Apps Script web app (aktoria-leads/xdm/sheet_sync.gs). From this page it can only mark one of our posts
 // posted/scheduled, one engager messaged, or change the plain DM Pipeline cells; the token below allows nothing else.
