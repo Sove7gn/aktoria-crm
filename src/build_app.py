@@ -72,6 +72,14 @@ rep('</sc-for>\n</div>\n</section>\n\n<section style="display:flex; flex-directi
 rep('{{ g.v }} <span style="color:var(--ink-4);">/ 1,000</span>', '{{ g.v }} <span style="color:var(--ink-4);">/ {{ g.tgt }}</span>')
 rep('<span style="font-size:var(--fs-xs); color:var(--ink-3);">4 this week. Goal is 5.</span>', '<span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ home.inqText }}</span>')
 
+# ---------- our posts: post type filter under the status tabs ----------
+rep('</sc-for>\n</div>\n</div>\n\n<div style="display:flex; flex-direction:column; gap:var(--s-5);">\n<sc-for list="{{ posts.list }}" as="p">',
+    '</sc-for>\n</div>\n</div>\n'
+    '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">\n<sc-for list="{{ posts.types }}" as="c">'
+    '<button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}'
+    '<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button>'
+    '</sc-for>\n</div>\n\n<div style="display:flex; flex-direction:column; gap:var(--s-5);">\n<sc-for list="{{ posts.list }}" as="p">')
+
 # ---------- send today ----------
 rep('<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>',
     '<span style="font-size:var(--fs-lg); font-weight:600;">{{ send.clearTitle }}</span>')

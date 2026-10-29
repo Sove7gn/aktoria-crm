@@ -34,6 +34,9 @@ const OWNERS=['Everyone','Karan','Shreenabh','Aktoria page'];
 const TIPS=['fq','pilot','cant','fund','fit','likely','verdict','target','eng1k','week','dms','rank','groups','skip'];
 const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Scheduled:{dot:'var(--ink-3)',bg:'var(--n-soft)',fg:'var(--ink-2)'},'To post':{dot:'var(--warn)',bg:'var(--warn-soft)',fg:'var(--warn-ink)'}};
 // Founder call, 29 Oct 2026: DMs wait until the accounts have presence and the Forbes piece is out.
+// Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
+const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
+const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
 const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
 /* sheet <-> design */
@@ -79,7 +82,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -199,8 +202,9 @@ class Component extends DCLogic {
     const folder=AK.FOLDERS.find(f=>o['Drive folder']&&(o['Drive folder'].indexOf(f.id)>=0||AK.norm(o['Drive folder']).indexOf(AK.norm(f.name))>=0));
     const time=st==='later'?'Later':o._date?AK.dayWord(o._date)+(o['Time (IST)']?', '+o['Time (IST)']+' IST':''):'Not set';
     const cNums=!t?'Its numbers aren’t saved in Their posts':t._li?fmtK(num(t.Reactions))+' reactions · '+fmtK(num(t.Comments))+' comments':(num(t.Views)?fmtK(num(t.Views))+' views · ':'')+fmtK(num(t.Likes))+' likes';
-    return {id:o._key,o,status,comp,compH:t?(t.Account||'')+(t.Platform?' · '+t.Platform:''):(o.Platform||'X'),
-      rankLabel:t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet',rankOf:comp,
+    const ptype=String(o['Post type']||'').trim();
+    return {id:o._key,o,status,ptype,kind:kindOf(ptype),comp,compH:t?(t.Account||'')+(t.Platform?' · '+t.Platform:''):(o.Platform||'X'),
+      rankLabel:(ptype?ptype+' · ':'')+(t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet'),rankOf:comp,
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
       media:media||'No media needed',needsMedia,folder,q:o['Founder question']||'',link:o['Posted link']||'',
@@ -419,13 +423,17 @@ class Component extends DCLogic {
     const ok=await AK.savePosted(p.o,this.state.linkVal,{quiet:true});
     if(ok){this.setState({linkFor:null,linkVal:''});this.toast('Marked as posted. Its numbers show up in the Post tracker within 3 hours.',AK.canRestore()?()=>this.restorePost(p,prev):null);}}
   async restorePost(p,prev){const o=AK.M.ours.find(x=>x._key===p.id)||p.o;if(await AK.restorePost(o,prev,''))this.toast('Undone');}
-  postsVals(){const s=this.state;const P=this.ownPosts();
+  postsVals(){const s=this.state;const all=this.ownPosts();const P=s.postType==='All'?all:all.filter(p=>p.kind===s.postType);
+    const inTab=all.filter(p=>p.status===s.postsTab);
+    const types=['All',...POST_KINDS].map(k=>{const n=k==='All'?inTab.length:inTab.filter(p=>p.kind===k).length;const on=s.postType===k;
+      return{label:k==='All'?'All types':k,count:String(n),go:()=>this.setState({postType:k,linkFor:null}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)',cbg:on?'rgba(255,255,255,.18)':'var(--n-soft)'};});
     const tabs=this.tabs(['To post','Scheduled','Posted','Later'].map(t=>[t,String(P.filter(p=>p.status===t).length)]),s.postsTab,t=>this.setState({postsTab:t,linkFor:null}));
     const list=P.filter(p=>p.status===s.postsTab).map(p=>this.postCard(p));
     const best=AK.copyNext(10).map((t,i)=>{const who=t._comp?t._comp.Name:t.Competitor;const v=num(t.Views);const k='bc'+t._key;const cb=this.copyBtn(k,'Copy original');
       return{who,...avatar(who),text:firstLine(t.Hook||t['Full text']),views:v?fmtK(v)+' views':fmtK(t._eng)+' eng.',age:(t.Platform||'X')+' · '+(t._date?AK.dayWord(t._date):t.Date||''),n:String(i+1).padStart(2,'0'),bt:i===0?'none':'1px solid var(--hairline)',canPlan:true,planLabel:cb.label,plan:()=>this.copy(t['Full text'],k,'Original copied: '+who)};});
-    const ET={'To post':'Every drafted post is scheduled or posted. New drafts arrive every night, 5 per account.','Scheduled':'Nothing is scheduled. Mark a post as scheduled once it’s set up in X.','Posted':'Nothing posted yet. Press Mark as posted with the link once a post is live.','Later':'Nothing parked for later.'};
-    return{tabs,list,empty:list.length===0,emptyTab:s.postsTab,emptyText:ET[s.postsTab]||'',best,hasBest:best.length>0};}
+    const ET={'To post':'Every drafted post is scheduled or posted. New drafts arrive every night: 12 options per account, post the best 3.','Scheduled':'Nothing is scheduled. Mark a post as scheduled once it’s set up in X.','Posted':'Nothing posted yet. Press Mark as posted with the link once a post is live.','Later':'Nothing parked for later.'};
+    const emptyText=s.postType!=='All'?'No '+s.postType.toLowerCase()+' posts here. Pick All types to see the rest.':ET[s.postsTab]||'';
+    return{tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
   cmpVals(){const s=this.state;const list=this.ownPosts().length?this.ownPosts():this.postList();if(!list.length)return{...this.blankCmp()};let i=list.findIndex(p=>p.id===s.cmpId);if(i<0)i=0;const c=this.postCard(list[i]);
     return{...c,pos:(i+1)+' of '+list.length,prev:()=>this.setState({cmpId:list[(i-1+list.length)%list.length].id}),next:()=>this.setState({cmpId:list[(i+1)%list.length].id}),close:()=>this.setState({cmpOn:false})};}
   blankCmp(){return{rankLabel:'',st:pill('',''),pos:'',prev:()=>{},next:()=>{},close:()=>this.setState({cmpOn:false}),comp:'',compH:'',cText:'',cNums:'',accAv:{},accName:'',time:'',text:'',hasNums:false,noNums:true,ourViews:'',ourLikes:'',changed:'',media:'',ini:'',avBg:'',avFg:''};}
@@ -1366,6 +1374,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <button onClick="{{ t.go }}" style="display:flex; align-items:center; gap:7px; height:32px; padding:0 12px; border:0; border-radius:9px; font-size:var(--fs-sm); font-weight:500; white-space:nowrap; cursor:pointer; background:{{ t.bg }}; color:{{ t.fg }}; box-shadow:{{ t.sh }}; transition:all var(--dur) var(--ease);" style-hover="color:var(--ink);" style-active="transform:scale(.97);">{{ t.label }}<sc-if value="{{ t.hasCount }}"><span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ t.cbg }};">{{ t.count }}</span></sc-if></button>
 </sc-for>
 </div>
+</div>
+<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">
+<sc-for list="{{ posts.types }}" as="c"><button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button></sc-for>
 </div>
 
 <div style="display:flex; flex-direction:column; gap:var(--s-5);">
