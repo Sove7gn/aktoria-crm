@@ -82,7 +82,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -207,6 +207,7 @@ class Component extends DCLogic {
       rankLabel:(ptype?ptype+' · ':'')+(t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet'),rankOf:comp,
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
+      tipText:'Where this post ranks among the '+comp+' posts we saved, by views. #1 is their biggest one.'+(o['What we changed']&&o.Competitor!=='Our own'?' What we changed: '+String(o['What we changed']).split('\n').map(x=>x.trim()).filter(Boolean).join('; '):''),
       media:media||'No media needed',needsMedia,folder,q:o['Founder question']||'',link:o['Posted link']||'',
       ourViews:ov!=null?fmtK(ov):'',ourLikes:ol!=null?fmtK(ol):'0',when:(o._date?o._date.getTime():9e15)+AK.minutesOf(o['Time (IST)'])*6e4};
   }
@@ -426,7 +427,8 @@ class Component extends DCLogic {
     if(!this.founder){actions.push(act(cb.label,s.copied===k?'copied':'secondary',()=>this.copy(p.text,k,'Our version copied')));
       if(p.status==='To post'){actions.push(act('Mark as scheduled','secondary',()=>this.markScheduled(p)));actions.push(act('Mark as posted','in',()=>this.setState({linkFor:p.id,linkVal:''})));}
       if(p.status==='Scheduled')actions.push(act('It’s live: add the link','in',()=>this.setState({linkFor:p.id,linkVal:''})));
-      if(p.status==='Posted'&&p.link)actions.push(act('Open on X ↗','ghost',()=>open(p.link)));}
+      if(p.status==='Posted'&&p.link)actions.push(act('Open on X ↗','ghost',()=>open(p.link)));
+      actions.push(act('Delete','ghost',()=>this.deletePost(p)));}
     const qk=p.id+'q';const qb=this.copyBtn(qk,'Copy for WhatsApp');
     return{...p,...avatar(p.comp),accAv:avatar(avName(p.acc)),accName:p.acc,st:pill(p.status,ST[p.status]),hasQ:!!p.q,hasNums:!!p.ourViews,noNums:!p.ourViews,actions,hasActions:actions.length>0,needsMedia:p.needsMedia,
       linkOpen:s.linkFor===p.id,linkVal:s.linkVal,linkPh:'Paste the link of '+p.acc+'’s post on X (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',onLink:e=>this.setState({linkVal:e.target.value}),saveLink:()=>this.markPosted(p),cancelLink:()=>this.setState({linkFor:null}),
@@ -437,6 +439,19 @@ class Component extends DCLogic {
   async markPosted(p){if(this.founder)return;const prev=p.o.Status||'';
     const ok=await AK.savePosted(p.o,this.state.linkVal,{quiet:true});
     if(ok){this.setState({linkFor:null,linkVal:''});this.toast('Marked as posted. Its numbers show up in the Post tracker within 3 hours.',AK.canRestore()?()=>this.restorePost(p,prev):null);}}
+  async deletePost(p){if(this.founder)return;
+    const ask=p.status==='Posted'?'Remove this post from the CRM and stop tracking it? It stays live on X; delete it there yourself if you want it gone.':'Delete this post from the CRM?';
+    if(!window.confirm(ask))return;
+    const prev=await AK.deletePost(p.o);if(prev===false)return;const row=p.o._row;
+    this.toast('Deleted',async()=>{if(await AK.undeletePost(row,prev))this.toast('Undone');});}
+  addVals(){const s=this.state;const today=new Date();const iso=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    const acc=accOf(s.owner);const f=s.addF||{account:acc&&acc!=='Everyone'?acc:'Karan',type:'Own post',status:'To post',date:iso,time:'',link:'',text:''};
+    const on={};['account','type','status','date','time','link','text'].forEach(k=>on[k]=e=>{const v=e.target.value;this.setState(st=>({addF:{...(st.addF||f),[k]:v}}));});
+    const busy=AK.S.busy.has('add');
+    return{canAdd:!this.founder,addOpen:!!s.addOpen,addLabel:s.addOpen?'Close':'+ Add a post',toggleAdd:()=>this.setState(st=>({addOpen:!st.addOpen,addF:st.addOpen?null:f})),f,on,
+      saveLabel:busy?'Saving…':'Save post',saveAdd:async()=>{if(busy)return;const v=s.addF||f;
+        const ok=await AK.addPost({...v,status:v.link?'Posted':v.status});
+        if(ok)this.setState({addOpen:false,addF:null,postsTab:v.link||v.status==='Posted'?'Posted':v.status==='Scheduled'?'Scheduled':'To post'});}};}
   async restorePost(p,prev){const o=AK.M.ours.find(x=>x._key===p.id)||p.o;if(await AK.restorePost(o,prev,''))this.toast('Undone');}
   postsVals(){const s=this.state;const all=this.ownPosts();const P=s.postType==='All'?all:all.filter(p=>p.kind===s.postType);
     const inTab=all.filter(p=>p.status===s.postsTab);
@@ -448,7 +463,7 @@ class Component extends DCLogic {
       return{who,...avatar(who),text:firstLine(t.Hook||t['Full text']),views:v?fmtK(v)+' views':fmtK(t._eng)+' eng.',age:(t.Platform||'X')+' · '+(t._date?AK.dayWord(t._date):t.Date||''),n:String(i+1).padStart(2,'0'),bt:i===0?'none':'1px solid var(--hairline)',canPlan:true,planLabel:cb.label,plan:()=>this.copy(t['Full text'],k,'Original copied: '+who)};});
     const ET={'To post':'Every drafted post is scheduled or posted. New drafts arrive every night: 12 options per account, post the best 3.','Scheduled':'Nothing is scheduled. Mark a post as scheduled once it’s set up in X.','Posted':'Nothing posted yet. Press Mark as posted with the link once a post is live.','Later':'Nothing parked for later.'};
     const emptyText=s.postType!=='All'?'No '+s.postType.toLowerCase()+' posts here. Pick All types to see the rest.':ET[s.postsTab]||'';
-    return{tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
+    return{...this.addVals(),tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
   cmpVals(){const s=this.state;const list=this.ownPosts().length?this.ownPosts():this.postList();if(!list.length)return{...this.blankCmp()};let i=list.findIndex(p=>p.id===s.cmpId);if(i<0)i=0;const c=this.postCard(list[i]);
     return{...c,pos:(i+1)+' of '+list.length,prev:()=>this.setState({cmpId:list[(i-1+list.length)%list.length].id}),next:()=>this.setState({cmpId:list[(i+1)%list.length].id}),close:()=>this.setState({cmpOn:false})};}
   blankCmp(){return{rankLabel:'',st:pill('',''),pos:'',prev:()=>{},next:()=>{},close:()=>this.setState({cmpOn:false}),comp:'',compH:'',cText:'',cNums:'',accAv:{},accName:'',time:'',text:'',hasNums:false,noNums:true,ourViews:'',ourLikes:'',changed:'',media:'',ini:'',avBg:'',avFg:''};}
@@ -673,6 +688,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span style="width:7px; height:7px; border-radius:50%; flex:0 0 7px; background:var(--ok); animation:ak-live 2.4s var(--ease) infinite;"></span>
 <span>{{ status }}</span>
 </button>
+<button onClick="{{ refresh }}" title="Reload the sheet now and pull new numbers and replies from X" style="display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">Refresh now</button>
 <a href="#" onClick="{{ openSheet }}" style="display:flex; align-items:center; justify-content:space-between; height:32px; padding:0 12px; border-radius:var(--r-btn); background:rgba(255,255,255,.65); box-shadow:var(--shadow-xs), inset 0 0 0 1px var(--hairline); font-size:var(--fs-xs); font-weight:500; color:var(--ink); transition:background var(--dur), box-shadow var(--dur);" style-hover="background:#fff; color:var(--ink); box-shadow:var(--shadow-sm);">Open sheet<span style="color:var(--ink-3);">↗</span></a>
 </div>
 </div>
@@ -1392,14 +1408,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </div>
 <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">
 <sc-for list="{{ posts.types }}" as="c"><button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button></sc-for>
+<sc-if value="{{ posts.canAdd }}"><button onClick="{{ posts.toggleAdd }}" style="margin-left:auto; display:inline-flex; align-items:center; height:30px; padding:0 14px; border-radius:var(--r-pill); border:1px solid var(--ink); background:#fff; color:var(--ink); font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ posts.addLabel }}</button></sc-if>
 </div>
+<sc-if value="{{ posts.addOpen }}">
+<div style="display:flex; flex-direction:column; gap:10px; padding:var(--s-4); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow-sm), inset 0 0 0 1px var(--hairline);">
+<span style="font-size:var(--fs-md); font-weight:600;">Add a post we wrote ourselves</span>
+<span style="font-size:var(--fs-xs); color:var(--ink-3);">Paste its link if it is already live and it gets tracked like the rest. Posts written straight on X are also added by the tracker on its own.</span>
+<div style="display:flex; flex-wrap:wrap; gap:8px;">
+<select value="{{ posts.f.account }}" onChange="{{ posts.on.account }}" aria-label="Account" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="Karan">Karan</option><option value="Shreenabh">Shreenabh</option><option value="Aktoria">Aktoria page</option></select>
+<select value="{{ posts.f.type }}" onChange="{{ posts.on.type }}" aria-label="Post type" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="Own post">Type: other</option><option value="Lead magnet">Lead magnet</option><option value="Founder story">Founder story</option><option value="Data post">Data post</option><option value="Tagging post">Tagging post</option></select>
+<select value="{{ posts.f.status }}" onChange="{{ posts.on.status }}" aria-label="Status" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="To post">To post</option><option value="Scheduled">Scheduled</option><option value="Posted">Already posted</option></select>
+<input type="date" value="{{ posts.f.date }}" onChange="{{ posts.on.date }}" aria-label="Date" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;">
+<input value="{{ posts.f.time }}" onChange="{{ posts.on.time }}" placeholder="Time, e.g. 8:30 PM" aria-label="Time" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none; width:150px;">
+</div>
+<input value="{{ posts.f.link }}" onChange="{{ posts.on.link }}" placeholder="Link on X, if it is live (x.com/.../status/...)" aria-label="Link" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;">
+<textarea value="{{ posts.f.text }}" onChange="{{ posts.on.text }}" placeholder="The post text" rows="4" style="padding:10px 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); font-family:inherit; resize:vertical; outline:none;"></textarea>
+<div style="display:flex; gap:8px;"><button onClick="{{ posts.saveAdd }}" style="height:36px; padding:0 16px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ posts.saveLabel }}</button><button onClick="{{ posts.toggleAdd }}" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:transparent; color:var(--ink-2); font-size:var(--fs-sm); cursor:pointer;">Cancel</button></div>
+</div>
+</sc-if>
 
 <div style="display:flex; flex-direction:column; gap:var(--s-5);">
 <sc-for list="{{ posts.list }}" as="p">
 <article style="border-radius:var(--r-xl); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); opacity:{{ E.op }}; transform:{{ E.t }}; transition:opacity 500ms var(--ease) 80ms, transform 500ms var(--ease) 80ms, box-shadow var(--dur-slow);" style-hover="box-shadow:var(--shadow-lg), var(--hi);">
 <header style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 12px 12px 16px; border-bottom:1px solid var(--hairline);">
 <span style="display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border-radius:var(--r-pill); font-size:var(--fs-2xs); font-weight:600; background:var(--in-soft); color:var(--in-ink); box-shadow:inset 0 0 0 1px var(--in-line);">{{ p.rankLabel }}
-<span onMouseEnter="{{ p.tip.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ p.tip.show }}" style="position:relative; display:inline-grid; place-items:center; width:14px; height:14px; border-radius:50%; font-family:var(--font-mono); font-size:8.5px; font-weight:600; box-shadow:inset 0 0 0 1px var(--in-line); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-12px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ p.tip.op }}; transform:{{ p.tip.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">Where this post ranks among the {{ p.rankOf }} posts we saved, by views. #1 is their biggest one.</span></span>
+<span onMouseEnter="{{ p.tip.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ p.tip.show }}" style="position:relative; display:inline-grid; place-items:center; width:14px; height:14px; border-radius:50%; font-family:var(--font-mono); font-size:8.5px; font-weight:600; box-shadow:inset 0 0 0 1px var(--in-line); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-12px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ p.tip.op }}; transform:{{ p.tip.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">{{ p.tipText }}</span></span>
 </span>
 <span style="display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border-radius:var(--r-pill); font-size:var(--fs-2xs); color:var(--ink-2); background:var(--n-soft);">{{ p.media }}</span>
 <sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}" style="font-size:var(--fs-2xs); font-weight:500; color:var(--in-ink); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--in-line);" style-hover="color:var(--ink);">Drive folder ↗</a></sc-if>
@@ -1430,10 +1463,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <sc-if value="{{ p.hasNums }}"><span style="margin-top:auto; font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--ok-ink);">{{ p.ourViews }} views · {{ p.ourLikes }} likes</span></sc-if>
 <sc-if value="{{ p.noNums }}"><span style="margin-top:auto; font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--ink-4);">Numbers show up once it’s live</span></sc-if>
 </div>
-</div>
-<div style="display:flex; gap:10px; padding:12px var(--s-5); border-top:1px solid var(--hairline); font-size:var(--fs-sm); line-height:1.5;">
-<span style="flex:0 0 auto; font-weight:600;">What we changed</span>
-<span style="color:var(--ink-2); text-wrap:pretty;">{{ p.changed }}</span>
 </div>
 <sc-if value="{{ p.hasQ }}">
 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 var(--s-4) var(--s-3); padding:10px 10px 10px 14px; border-radius:var(--r-md); background:var(--warn-soft); box-shadow:inset 0 0 0 1px var(--warn-line);">
@@ -2076,7 +2105,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </div>
 </div>
 <div style="display:flex; flex-wrap:wrap; gap:var(--s-3) var(--s-6); padding:var(--s-4) var(--s-5); border-radius:var(--r-lg); background:rgba(255,255,255,.6); box-shadow:inset 0 0 0 1px var(--hairline);">
-<div style="flex:2 1 300px; display:flex; flex-direction:column; gap:4px;"><span style="font-size:var(--fs-2xs); color:var(--ink-3);">What we changed</span><span style="font-size:var(--fs-md); line-height:1.5;">{{ cmp.changed }}</span></div>
 <div style="flex:1 1 200px; display:flex; flex-direction:column; gap:4px;"><span style="font-size:var(--fs-2xs); color:var(--ink-3);">Media needed</span><span style="font-size:var(--fs-md);">{{ cmp.media }}</span></div>
 </div>
 </div>

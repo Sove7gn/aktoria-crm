@@ -78,7 +78,33 @@ rep('</sc-for>\n</div>\n</div>\n\n<div style="display:flex; flex-direction:colum
     '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">\n<sc-for list="{{ posts.types }}" as="c">'
     '<button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}'
     '<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button>'
-    '</sc-for>\n</div>\n\n<div style="display:flex; flex-direction:column; gap:var(--s-5);">\n<sc-for list="{{ posts.list }}" as="p">')
+    '</sc-for>\n'
+    '<sc-if value="{{ posts.canAdd }}"><button onClick="{{ posts.toggleAdd }}" style="margin-left:auto; display:inline-flex; align-items:center; height:30px; padding:0 14px; border-radius:var(--r-pill); border:1px solid var(--ink); background:#fff; color:var(--ink); font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ posts.addLabel }}</button></sc-if>\n'
+    '</div>\n'
+    '<sc-if value="{{ posts.addOpen }}">\n'
+    '<div style="display:flex; flex-direction:column; gap:10px; padding:var(--s-4); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow-sm), inset 0 0 0 1px var(--hairline);">\n'
+    '<span style="font-size:var(--fs-md); font-weight:600;">Add a post we wrote ourselves</span>\n'
+    '<span style="font-size:var(--fs-xs); color:var(--ink-3);">Paste its link if it is already live and it gets tracked like the rest. Posts written straight on X are also added by the tracker on its own.</span>\n'
+    '<div style="display:flex; flex-wrap:wrap; gap:8px;">\n'
+    '<select value="{{ posts.f.account }}" onChange="{{ posts.on.account }}" aria-label="Account" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="Karan">Karan</option><option value="Shreenabh">Shreenabh</option><option value="Aktoria">Aktoria page</option></select>\n'
+    '<select value="{{ posts.f.type }}" onChange="{{ posts.on.type }}" aria-label="Post type" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="Own post">Type: other</option><option value="Lead magnet">Lead magnet</option><option value="Founder story">Founder story</option><option value="Data post">Data post</option><option value="Tagging post">Tagging post</option></select>\n'
+    '<select value="{{ posts.f.status }}" onChange="{{ posts.on.status }}" aria-label="Status" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;"><option value="To post">To post</option><option value="Scheduled">Scheduled</option><option value="Posted">Already posted</option></select>\n'
+    '<input type="date" value="{{ posts.f.date }}" onChange="{{ posts.on.date }}" aria-label="Date" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;">\n'
+    '<input value="{{ posts.f.time }}" onChange="{{ posts.on.time }}" placeholder="Time, e.g. 8:30 PM" aria-label="Time" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none; width:150px;">\n'
+    '</div>\n'
+    '<input value="{{ posts.f.link }}" onChange="{{ posts.on.link }}" placeholder="Link on X, if it is live (x.com/.../status/...)" aria-label="Link" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); outline:none;">\n'
+    '<textarea value="{{ posts.f.text }}" onChange="{{ posts.on.text }}" placeholder="The post text" rows="4" style="padding:10px 12px; border:0; border-radius:var(--r-btn); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-sm); font-family:inherit; resize:vertical; outline:none;"></textarea>\n'
+    '<div style="display:flex; gap:8px;"><button onClick="{{ posts.saveAdd }}" style="height:36px; padding:0 16px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ posts.saveLabel }}</button>'
+    '<button onClick="{{ posts.toggleAdd }}" style="height:36px; padding:0 12px; border:0; border-radius:var(--r-btn); background:transparent; color:var(--ink-2); font-size:var(--fs-sm); cursor:pointer;">Cancel</button></div>\n'
+    '</div>\n</sc-if>\n'
+    '\n<div style="display:flex; flex-direction:column; gap:var(--s-5);">\n<sc-for list="{{ posts.list }}" as="p">')
+
+rep('<div style="flex:2 1 300px; display:flex; flex-direction:column; gap:4px;"><span style="font-size:var(--fs-2xs); color:var(--ink-3);">What we changed</span><span style="font-size:var(--fs-md); line-height:1.5;">{{ cmp.changed }}</span></div>\n', '')
+
+# ---------- sidebar: a visible Refresh button above Open sheet ----------
+rep('<a href="#" onClick="{{ openSheet }}"',
+    '<button onClick="{{ refresh }}" title="Reload the sheet now and pull new numbers and replies from X" style="display:flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; border:0; border-radius:var(--r-btn); background:var(--ink); color:#fff; font-size:var(--fs-xs); font-weight:500; cursor:pointer;">Refresh now</button>\n'
+    '<a href="#" onClick="{{ openSheet }}"')
 
 # ---------- send today ----------
 rep('<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>',
@@ -116,7 +142,11 @@ rep('<span style="font-size:var(--fs-sm); color:var(--ink-3);">{{ t.about }} {{ 
 
 # ---------- our posts ----------
 rep('Where this post ranks among everything {{ p.rankOf }} has posted, by views. #1 is their biggest post ever.',
-    'Where this post ranks among the {{ p.rankOf }} posts we saved, by views. #1 is their biggest one.')
+    '{{ p.tipText }}')
+# "What we changed" moves into that "i" (team ask 29 Oct: no text on the card that isn't useful)
+rep('<div style="display:flex; gap:10px; padding:12px var(--s-5); border-top:1px solid var(--hairline); font-size:var(--fs-sm); line-height:1.5;">\n'
+    '<span style="flex:0 0 auto; font-weight:600;">What we changed</span>\n'
+    '<span style="color:var(--ink-2); text-wrap:pretty;">{{ p.changed }}</span>\n</div>\n', '')
 rep('<span style="margin-top:auto; font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--ink-3);">{{ p.cViews }} views · {{ p.cLikes }} likes</span>',
     '<span style="margin-top:auto; font-family:var(--font-mono); font-size:var(--fs-2xs); color:var(--ink-3);">{{ p.cNums }}</span>')
 rep('placeholder="Paste the link to the post on X"', 'placeholder="{{ p.linkPh }}"')

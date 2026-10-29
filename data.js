@@ -205,10 +205,11 @@ function build(){
   const byC=new Map();
   for(const t of M.theirs){const k=t._comp?t._comp.Name:t.Competitor;if(!byC.has(k))byC.set(k,[]);byC.get(k).push(t)}
   for(const list of byC.values()){list.sort(bigFirst);list.forEach((t,i)=>{t._vrank=i+1;t._vrankN=list.length})}
-  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
+  // Rows deleted in the CRM keep Status "Deleted" in the sheet (so Undo works) and are left out everywhere here.
+  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]||r["Posted link"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
     const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}
-    const st=S.statusLocal[r._row];if(st&&!r["Posted link"]&&Date.now()-st.at<6e5)r.Status=st.status;
-    return r}):[];
+    const st=S.statusLocal[r._row];if(st&&(st.status==="Deleted"||st.was==="Deleted"||!r["Posted link"])&&Date.now()-st.at<6e5)r.Status=st.status;
+    return r}).filter(r=>r.Status!=="Deleted"):[];
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
   M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
     const ml=S.messagedLocal[r._row];
@@ -305,8 +306,29 @@ async function publicLoad(){
   }));
   build();emit();
 }
+/* Live read (29 Oct): the published copy lags about 5 minutes, so Refresh and every save read the sheet live through the
+   Apps Script ("read") and keep doing so every 20 seconds for 6 minutes; after that it's the published copy every minute. */
+async function liveLoad(){
+  const keys=Object.keys(RANGES);
+  const res=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify({token:PAGE_TOKEN,action:"read",ranges:keys.map(k=>RANGES[k])})});
+  const data=await res.json();   // an older deployment answers with plain text, which throws here
+  let n=0;
+  keys.forEach(k=>{const v=data[RANGES[k]];if(v){S.raw[k]=trimGrid(v);S.at[k]=Date.now();S.err[k]=null;n++}});
+  if(!n)throw new Error("live read unavailable");
+  build();emit();
+}
+const goLive=()=>{S.liveUntil=Date.now()+36e4;return liveLoad().catch(()=>publicLoad())};
+let ticks=0;
+function poll(){ticks++;if(Date.now()<(S.liveUntil||0))return liveLoad().catch(()=>{});if(ticks%3===0)return publicLoad()}
+// Refresh: reload the sheet now and ask the team's computer to run the post tracker (new numbers and replies from X).
 async function refresh(){
-  if(S.pub){toast("Reloading from the Google Sheet…");return publicLoad()}
+  if(S.pub){
+    let asked=false;
+    try{await scriptCall({action:"refresh"});asked=true}catch(e){}
+    await goLive();
+    toast(asked?"Up to date with the sheet. New numbers and replies from X land in about 3 minutes; this page keeps checking.":"Up to date with the sheet.");
+    return;
+  }
   if(!S.mcp)return;
   try{await S.mcp.invalidate(SERVER,"get_values")}catch(e){}
   toast("Reloading from the Google Sheet…");
@@ -524,6 +546,47 @@ async function savePaused(on){
   }catch(e){toast("Couldn't save: "+(e&&e.message||e),true)}
   S.busy.delete("pause");emit();return ok;
 }
+/* Delete a post from the CRM: Status "Deleted" (never deletes anything on X). Undo puts the old status back. */
+const snip=t=>String(t||"").replace(/\s+/g," ").trim().slice(0,40);
+async function deletePost(p){
+  if(S.busy.has(p._key))return false;
+  S.busy.add(p._key);emit();let ok=false;const prev=p.Status||"";
+  try{
+    if(S.mcp)await putCells("'Our Posts'!O"+p._row,[["Deleted"]]);
+    else await scriptCall({action:"deletePost",row:p._row,snippet:snip(p["Our version"])});
+    S.statusLocal[p._row]={status:"Deleted",at:Date.now()};build();ok=true;
+    if(S.pub)goLive();else reloadRange("ours");
+  }catch(e){toast("Couldn't delete: "+(e&&e.message||e),true)}
+  S.busy.delete(p._key);emit();return ok?prev:false;
+}
+async function undeletePost(row,prev){
+  try{
+    if(S.mcp)await putCells("'Our Posts'!O"+row,[[prev||"Ready to post"]]);
+    else await scriptCall({action:"restorePost",row,status:prev||"Ready to post"});
+    S.statusLocal[row]={status:prev||"Ready to post",was:"Deleted",at:Date.now()};build();emit();
+    if(S.pub)goLive();else reloadRange("ours");return true;
+  }catch(e){toast("Couldn't undo: "+(e&&e.message||e),true);return false}
+}
+/* Add a post by hand (one the drafts didn't suggest). With a link it's Posted and the tracker follows it. */
+async function addPost(f){
+  if(S.busy.has("add"))return false;
+  S.busy.add("add");emit();let ok=false;
+  try{
+    const link=f.link?ourPostLink(f.link,f.account):"";
+    if(f.link&&!link)throw new Error("that isn't a post from @"+(HANDLES[f.account]||"?")+". Paste the link of the post itself (x.com/…/status/…)");
+    if(!link&&!String(f.text||"").trim())throw new Error("add the post text or its link");
+    if(S.mcp){
+      const when=f.date?new Date(f.date):new Date();const row=3+(S.raw.ours||[]).length;
+      const week="W"+Math.max(1,Math.floor((when-new Date(2026,9,25))/6048e5)+1);
+      const date=when.getDate()+" "+MON[when.getMonth()]+" "+when.getFullYear();
+      await putCells("'Our Posts'!A"+row+":Q"+row,[[week,date,f.time||"",f.account,"X",f.type||"Own post","Our own","","",f.text||"",
+        "Added by hand in the CRM","","","",link?"Posted":f.status==="Scheduled"?"Scheduled":"Ready to post","",link]]);
+      reloadRange("ours");
+    }else{await scriptCall(Object.assign({action:"addPost"},f,{link}));goLive()}
+    ok=true;toast(link?"Added. The tracker picks up its numbers and replies on its next run (or press Refresh).":"Added to "+(f.status==="Scheduled"?"Scheduled":"To post")+".");
+  }catch(e){toast("Couldn't add: "+(e&&e.message||e),true)}
+  S.busy.delete("add");emit();return ok;
+}
 /* Undo on claude.ai: put the exact cells back (the public page's Apps Script has no action that can do this). */
 const canRestore=()=>!!S.mcp;
 async function restorePost(p,prevStatus,prevLink){
@@ -677,7 +740,7 @@ function lastUpdate(){const t=Object.values(S.at).filter(Boolean);return t.lengt
 
 let cache=null;
 function start(){
-  if(!(window.claude&&window.claude.use)){S.mcp=null;S.pub=true;emit();publicLoad();setInterval(publicLoad,60000);return}
+  if(!(window.claude&&window.claude.use)){S.mcp=null;S.pub=true;emit();publicLoad();setInterval(poll,20000);return}
   window.claude.use("mcp").then(mcp=>{
     S.mcp=mcp||null;
     if(S.mcp)Object.keys(RANGES).forEach(watch);
@@ -691,7 +754,7 @@ window.AK={
   num,fmtK,safeUrl,xUrl,host,parseDate,cellDate,sheetSerial,fmtSerial,ago,plain,firstName,norm,median,weekStart,sameDay,dayWord,folderUrl,
   bucket,fundKind,sendable,messages,statusCells,undoCells,write,canEdit,canRestore,
   postStage,minutesOf,linkKey,originalFor,copiesOf,rate,ourEng,isNew,newPosts,markSeen,ourPostLink,
-  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,
+  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,
   typeStats,copyNext,founderAsks,trackedPosts,whyFor,patterns,weekGrid,dmResults,viewsOf,bigFirst,compFor,
 };
 start();

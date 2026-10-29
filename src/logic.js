@@ -73,7 +73,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -198,6 +198,7 @@ class Component extends DCLogic {
       rankLabel:(ptype?ptype+' · ':'')+(t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet'),rankOf:comp,
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
+      tipText:'Where this post ranks among the '+comp+' posts we saved, by views. #1 is their biggest one.'+(o['What we changed']&&o.Competitor!=='Our own'?' What we changed: '+String(o['What we changed']).split('\n').map(x=>x.trim()).filter(Boolean).join('; '):''),
       media:media||'No media needed',needsMedia,folder,q:o['Founder question']||'',link:o['Posted link']||'',
       ourViews:ov!=null?fmtK(ov):'',ourLikes:ol!=null?fmtK(ol):'0',when:(o._date?o._date.getTime():9e15)+AK.minutesOf(o['Time (IST)'])*6e4};
   }
@@ -417,7 +418,8 @@ class Component extends DCLogic {
     if(!this.founder){actions.push(act(cb.label,s.copied===k?'copied':'secondary',()=>this.copy(p.text,k,'Our version copied')));
       if(p.status==='To post'){actions.push(act('Mark as scheduled','secondary',()=>this.markScheduled(p)));actions.push(act('Mark as posted','in',()=>this.setState({linkFor:p.id,linkVal:''})));}
       if(p.status==='Scheduled')actions.push(act('It’s live: add the link','in',()=>this.setState({linkFor:p.id,linkVal:''})));
-      if(p.status==='Posted'&&p.link)actions.push(act('Open on X ↗','ghost',()=>open(p.link)));}
+      if(p.status==='Posted'&&p.link)actions.push(act('Open on X ↗','ghost',()=>open(p.link)));
+      actions.push(act('Delete','ghost',()=>this.deletePost(p)));}
     const qk=p.id+'q';const qb=this.copyBtn(qk,'Copy for WhatsApp');
     return{...p,...avatar(p.comp),accAv:avatar(avName(p.acc)),accName:p.acc,st:pill(p.status,ST[p.status]),hasQ:!!p.q,hasNums:!!p.ourViews,noNums:!p.ourViews,actions,hasActions:actions.length>0,needsMedia:p.needsMedia,
       linkOpen:s.linkFor===p.id,linkVal:s.linkVal,linkPh:'Paste the link of '+p.acc+'’s post on X (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',onLink:e=>this.setState({linkVal:e.target.value}),saveLink:()=>this.markPosted(p),cancelLink:()=>this.setState({linkFor:null}),
@@ -428,6 +430,19 @@ class Component extends DCLogic {
   async markPosted(p){if(this.founder)return;const prev=p.o.Status||'';
     const ok=await AK.savePosted(p.o,this.state.linkVal,{quiet:true});
     if(ok){this.setState({linkFor:null,linkVal:''});this.toast('Marked as posted. Its numbers show up in the Post tracker within 3 hours.',AK.canRestore()?()=>this.restorePost(p,prev):null);}}
+  async deletePost(p){if(this.founder)return;
+    const ask=p.status==='Posted'?'Remove this post from the CRM and stop tracking it? It stays live on X; delete it there yourself if you want it gone.':'Delete this post from the CRM?';
+    if(!window.confirm(ask))return;
+    const prev=await AK.deletePost(p.o);if(prev===false)return;const row=p.o._row;
+    this.toast('Deleted',async()=>{if(await AK.undeletePost(row,prev))this.toast('Undone');});}
+  addVals(){const s=this.state;const today=new Date();const iso=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    const acc=accOf(s.owner);const f=s.addF||{account:acc&&acc!=='Everyone'?acc:'Karan',type:'Own post',status:'To post',date:iso,time:'',link:'',text:''};
+    const on={};['account','type','status','date','time','link','text'].forEach(k=>on[k]=e=>{const v=e.target.value;this.setState(st=>({addF:{...(st.addF||f),[k]:v}}));});
+    const busy=AK.S.busy.has('add');
+    return{canAdd:!this.founder,addOpen:!!s.addOpen,addLabel:s.addOpen?'Close':'+ Add a post',toggleAdd:()=>this.setState(st=>({addOpen:!st.addOpen,addF:st.addOpen?null:f})),f,on,
+      saveLabel:busy?'Saving…':'Save post',saveAdd:async()=>{if(busy)return;const v=s.addF||f;
+        const ok=await AK.addPost({...v,status:v.link?'Posted':v.status});
+        if(ok)this.setState({addOpen:false,addF:null,postsTab:v.link||v.status==='Posted'?'Posted':v.status==='Scheduled'?'Scheduled':'To post'});}};}
   async restorePost(p,prev){const o=AK.M.ours.find(x=>x._key===p.id)||p.o;if(await AK.restorePost(o,prev,''))this.toast('Undone');}
   postsVals(){const s=this.state;const all=this.ownPosts();const P=s.postType==='All'?all:all.filter(p=>p.kind===s.postType);
     const inTab=all.filter(p=>p.status===s.postsTab);
@@ -439,7 +454,7 @@ class Component extends DCLogic {
       return{who,...avatar(who),text:firstLine(t.Hook||t['Full text']),views:v?fmtK(v)+' views':fmtK(t._eng)+' eng.',age:(t.Platform||'X')+' · '+(t._date?AK.dayWord(t._date):t.Date||''),n:String(i+1).padStart(2,'0'),bt:i===0?'none':'1px solid var(--hairline)',canPlan:true,planLabel:cb.label,plan:()=>this.copy(t['Full text'],k,'Original copied: '+who)};});
     const ET={'To post':'Every drafted post is scheduled or posted. New drafts arrive every night: 12 options per account, post the best 3.','Scheduled':'Nothing is scheduled. Mark a post as scheduled once it’s set up in X.','Posted':'Nothing posted yet. Press Mark as posted with the link once a post is live.','Later':'Nothing parked for later.'};
     const emptyText=s.postType!=='All'?'No '+s.postType.toLowerCase()+' posts here. Pick All types to see the rest.':ET[s.postsTab]||'';
-    return{tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
+    return{...this.addVals(),tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
   cmpVals(){const s=this.state;const list=this.ownPosts().length?this.ownPosts():this.postList();if(!list.length)return{...this.blankCmp()};let i=list.findIndex(p=>p.id===s.cmpId);if(i<0)i=0;const c=this.postCard(list[i]);
     return{...c,pos:(i+1)+' of '+list.length,prev:()=>this.setState({cmpId:list[(i-1+list.length)%list.length].id}),next:()=>this.setState({cmpId:list[(i+1)%list.length].id}),close:()=>this.setState({cmpOn:false})};}
   blankCmp(){return{rankLabel:'',st:pill('',''),pos:'',prev:()=>{},next:()=>{},close:()=>this.setState({cmpOn:false}),comp:'',compH:'',cText:'',cNums:'',accAv:{},accName:'',time:'',text:'',hasNums:false,noNums:true,ourViews:'',ourLikes:'',changed:'',media:'',ini:'',avBg:'',avFg:''};}
