@@ -19,7 +19,7 @@ const RANGES={
   comps:"'Competitors'!A3:O60",
   people:"'Competitor People'!A3:H200",
   theirs:"'Their Posts'!A3:AB1000",
-  ours:"'Our Posts'!A3:Y500",
+  ours:"'Our Posts'!A3:Z500",
   draftsK:"'Karan Posts'!A3:U200",
   draftsS:"'Shreenabh Posts'!A3:U200",
   draftsA:"'Aktoria Posts'!A3:U200",
@@ -72,6 +72,8 @@ const S={
   mcp:undefined, pub:false, raw:{}, at:{}, err:{}, busy:new Set(),
   // Saved here until the sheet catches up (the published copy lags a few minutes).
   postedLocal:{}, statusLocal:{}, messagedLocal:{}, pipeLocal:{}, pausedLocal:null, moveLocal:{},
+  // Calendar edits (31 Oct): fields saved but not read back yet, cards still being created, and the last text we wrote per row.
+  calLocal:{}, calTemp:[], calText:{}, calAlias:{},
 };
 const M={accounts:[],weekly:[],headers:[],contacts:[],targets:[],stats:[],templates:[],comps:[],people:[],theirs:[],ours:[],drafts:[],tracking:[],engagers:[]};
 let version=0;
@@ -206,11 +208,16 @@ function build(){
   for(const t of M.theirs){const k=t._comp?t._comp.Name:t.Competitor;if(!byC.has(k))byC.set(k,[]);byC.get(k).push(t)}
   for(const list of byC.values()){list.sort(bigFirst);list.forEach((t,i)=>{t._vrank=i+1;t._vrankN=list.length})}
   // Rows deleted in the CRM keep Status "Deleted" in the sheet (so Undo works) and are left out everywhere here.
-  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]||r["Posted link"]).map(r=>{r._date=parseDate(r.Date);r._key="o"+r._row;
+  M.ours=S.raw.ours?toObjects(S.raw.ours,0,3).rows.filter(r=>r["Our version"]||r["Their post"]||r["Posted link"]||r.Calendar).map(r=>{r._date=parseDate(r.Date);r._key="o"+(S.calAlias[r._row]||r._row);
     const local=S.postedLocal[r._row];if(local&&!r["Posted link"]){r["Posted link"]=local;r.Status="Posted"}
     const st=S.statusLocal[r._row];if(st&&(st.status==="Deleted"||st.was==="Deleted"||!r["Posted link"])&&Date.now()-st.at<6e5)r.Status=st.status;
     const mv=S.moveLocal[r._row];if(mv&&!r["Posted link"]&&Date.now()-mv.at<6e5){r.Date=mv.date;r["Time (IST)"]=mv.time;if(mv.status)r.Status=mv.status;r._date=parseDate(r.Date)}
+    calOverlay(r,r._row);r._date=parseDate(r.Date);
     return r}).filter(r=>r.Status!=="Deleted"):[];
+  // Cards made on the calendar that the sheet hasn't shown yet.
+  S.calTemp=S.calTemp.filter(t=>!(t.row&&M.ours.some(r=>r._row===t.row)));
+  for(const t of S.calTemp){const r={_row:t.key,_key:"o"+t.key,_temp:true,Date:t.date,"Time (IST)":t.time,Account:t.account,Platform:"X",Competitor:"Our own",
+    "What we changed":"Added in the calendar",Status:"Draft",Calendar:"Yes","Our version":""};calOverlay(r,t.key);r._date=parseDate(r.Date);if(r.Status!=="Deleted")M.ours.push(r)}
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
   M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
     const ml=S.messagedLocal[r._row];
@@ -485,6 +492,7 @@ async function scriptCall(body){
   const text=await res.text();
   if(/^bad pass/.test(text)){store.set("pass","");throw new Error("Wrong team passcode. Try again and it will ask for it")}
   if(!/^ok/.test(text))throw new Error(text||"The sheet didn't answer");
+  return text;
 }
 const canEdit=()=>!!S.mcp||!!S.pub;
 const putCells=(range,values)=>S.mcp.callTool(SERVER,"update_values",{spreadsheetId:SHEET_ID,range,values},{cache:false});
@@ -605,6 +613,79 @@ async function addPost(f){
   }catch(e){toast("Couldn't add: "+(e&&e.message||e),true)}
   S.busy.delete("add");emit();return ok;
 }
+/* ---------- calendar (31 Oct) ----------
+   A post is on the calendar only when its Our Posts column Z (Calendar) says "Yes": nothing lands there on its own.
+   Every card edit saves straight to its row; edits wait in a queue so a new card gets its row before anything else is written. */
+const CAL_COLS={date:["Date","B"],time:["Time (IST)","C"],type:["Post type","F"],text:["Our version","J"],media:["Media file","N"],
+  status:["Status","O"],link:["Posted link","Q"],aimed:["Aimed at","Y"],cal:["Calendar","Z"]};
+// Saved card fields show at once and stay until the sheet reads them back (or 10 minutes pass).
+function calOverlay(r,key){
+  const loc=S.calLocal[key];if(!loc)return;
+  if(!r._temp&&(Date.now()-loc.at>6e5||Object.keys(loc.f).every(k=>String(r[CAL_COLS[k][0]]||"")===String(loc.f[k])))){if(!loc.pending)delete S.calLocal[key];return}
+  for(const k in loc.f)r[CAL_COLS[k][0]]=loc.f[k];
+}
+const weekOf=ds=>{const d=parseDate(ds);return "W"+Math.max(1,Math.floor(((d||new Date())-new Date(2026,9,25))/6048e5)+1)};
+const rawText=row=>{const g=S.raw.ours||[];const r=g[row-3];return r?snip(r[9]):""};
+let calQ=Promise.resolve();
+function queue(fn){const run=calQ.then(fn);calQ=run.then(()=>{},()=>{});return run}
+// A new card for an account on a day ("D Mon YYYY"); time is IST ("7:30 PM") or blank. Returns the card's id.
+function calNew(account,date,time){
+  const key="n"+Date.now().toString(36);
+  const t={key,account,date,time:time||"",row:null};
+  S.calTemp.push(t);build();emit();
+  t.ready=queue(async()=>{
+    let row;
+    if(S.mcp){
+      row=3+(S.raw.ours||[]).length;
+      await putCells("'Our Posts'!A"+row+":Z"+row,[[weekOf(date),date,time||"",account,"X","","Our own","","","","Added in the calendar","","","","Draft",
+        "","","","","","","","","","","Yes"]]);
+    }else row=Number(String(await scriptCall({action:"calSave",account,date,time:time||"",cal:"Yes",status:"Draft"})).split(" ")[1]);
+    if(!row)throw new Error("the sheet didn't say which row it used");
+    t.row=row;S.calAlias[row]=key;S.calText[row]="";
+    if(S.calLocal[key])S.calLocal[row]=S.calLocal[key];
+    if(S.pub)goLive();else reloadRange("ours");
+    return row;
+  }).catch(e=>{toast("Couldn't add the post: "+(e&&e.message||e),true);S.calTemp=S.calTemp.filter(x=>x!==t);build();emit();return null});
+  return "o"+key;
+}
+// Save card fields: {date, time, type, text, media, status, link, aimed, cal}. The card shows them at once.
+function calSave(o,fields){
+  fields=Object.assign({},fields);
+  if(fields.link){const l=ourPostLink(fields.link,o.Account);
+    if(!l){toast("That isn't a post from @"+(HANDLES[o.Account]||"?")+". Paste the link of the post itself (x.com/…/status/…).",true);return Promise.resolve(false)}
+    fields.link=l;fields.status="Posted"}
+  const key=o._row;
+  const loc=S.calLocal[key]=S.calLocal[key]||{f:{}};Object.assign(loc.f,fields);loc.at=Date.now();loc.pending=(loc.pending||0)+1;
+  build();emit();
+  return queue(async()=>{
+    let row=o._row;
+    if(o._temp){const t=S.calTemp.find(x=>x.key===o._row);row=t?(t.row||await t.ready):Number(Object.keys(S.calAlias).find(r=>S.calAlias[r]===o._row)||0)}
+    if(!row)return false;
+    if(key!==row)S.calLocal[row]=S.calLocal[key];
+    if(S.mcp){
+      for(const k in fields){await putCells("'Our Posts'!"+CAL_COLS[k][1]+row,[[fields[k]]]);if(k==="date")await putCells("'Our Posts'!A"+row,[[weekOf(fields.date)]])}
+    }else await scriptCall(Object.assign({action:"calSave",row,snippet:S.calText[row]!=null?S.calText[row]:rawText(row)},fields));
+    if("text" in fields)S.calText[row]=snip(fields.text);
+    loc.pending--;loc.at=Date.now();
+    if(S.pub)goLive();else reloadRange("ours");
+    return true;
+  }).catch(e=>{toast("Couldn't save: "+(e&&e.message||e),true);loc.pending=0;for(const k in fields)delete loc.f[k];build();emit();return false});
+}
+// Upload a photo or clip for a card to the team's Drive and attach it (column N, one Drive link per line).
+const mediaIds=s=>String(s||"").split(/\s+/).map(x=>(x.match(/(?:\/d\/|[?&]id=)([\w-]{20,})/)||[])[1]).filter(Boolean);
+async function calUpload(o,file){
+  if(!S.pub){toast("Uploading works on the team site (sove7gn.github.io/aktoria-crm).",true);return false}
+  if(file.size>25e6){toast("That file is over 25 MB. Put it in the Drive folder and paste the link instead.",true);return false}
+  const k="up"+o._key;S.busy.add(k);emit();
+  try{
+    const data=await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(",")[1]);fr.onerror=no;fr.readAsDataURL(file)});
+    const id=String(await scriptCall({action:"upload",name:file.name,mime:file.type||"application/octet-stream",data})).split(" ")[1];
+    const cur=String(o["Media file"]||"").trim();
+    return await calSave(o,{media:(cur?cur+"\n":"")+"https://drive.google.com/file/d/"+id+"/view"});
+  }catch(e){toast("Couldn't upload: "+(e&&e.message||e),true);return false}
+  finally{S.busy.delete(k);emit()}
+}
+
 /* Undo on claude.ai: put the exact cells back (the public page's Apps Script has no action that can do this). */
 const canRestore=()=>!!S.mcp;
 async function restorePost(p,prevStatus,prevLink){
@@ -772,7 +853,7 @@ window.AK={
   num,fmtK,safeUrl,xUrl,host,parseDate,cellDate,sheetSerial,fmtSerial,ago,plain,firstName,norm,median,weekStart,sameDay,dayWord,folderUrl,
   bucket,fundKind,sendable,messages,statusCells,undoCells,write,canEdit,canRestore,
   postStage,minutesOf,linkKey,originalFor,copiesOf,rate,ourEng,isNew,newPosts,markSeen,ourPostLink,
-  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,movePosts,
+  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,movePosts,calNew,calSave,calUpload,mediaIds,
   typeStats,copyNext,founderAsks,trackedPosts,whyFor,patterns,weekGrid,dmResults,viewsOf,bigFirst,compFor,
 };
 start();

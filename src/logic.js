@@ -28,12 +28,28 @@ const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Sched
 // Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
 const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
 const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
-// Calendar (29 Oct): only posts planned to go live show (3 posting slots per account a day); drafts whose Time is
-// "Option" stay off it until someone adds them with +. Times follow the account's slots in the order shown.
-const SLOTS={Karan:['7:30 PM','9:45 PM','11:00 PM'],Shreenabh:['7:45 PM','10:15 PM','11:15 PM'],Aktoria:['8:00 PM','10:30 PM','11:30 PM']};
-const EXTRA_SLOTS=['12:30 AM','1:00 AM','1:30 AM','2:00 AM','2:30 AM'];
-// An option = a draft not placed on a slot yet: Time "Option" or blank. Posted and scheduled posts always show.
-const isOpt=p=>p.status!=='Posted'&&p.status!=='Scheduled'&&/^(option)?$/i.test(String(p.o['Time (IST)']||'').trim());
+// Calendar (31 Oct): one board per account, a column per day. Only posts the team puts there show (Our Posts column Z
+// "Calendar" = Yes); nothing is filled in on its own. The sheet keeps times in IST; the board shows them in IST or Pacific time.
+const onCal=p=>/^yes$/i.test(String(p.o.Calendar||'').trim());
+const CAL_TYPES=['Lead magnet','Founder story','Data post','Tagging post','How it works','Contrarian take','Company news','Behind the scenes','Operator floor data'];
+const CAL_AIMED=['Data buyers','Robot builders','Robot deployers','Everyone in robotics'];
+const CAL_ST=['Draft','Ready to post','Scheduled','Posted'];
+const CAL_PILL={Draft:['var(--n-soft)','var(--ink-2)'],Scheduled:['var(--in-soft)','var(--in-ink)'],Posted:['var(--ok-soft)','var(--ok-ink)']};
+const KIND_DOT={'Lead magnet':'var(--warn)','Founder story':'oklch(0.68 0.16 45)','Data post':'var(--out)','Tagging post':'var(--mid)',Other:'var(--ink-4)'};
+const ZONES={ist:{tz:'Asia/Kolkata',label:'IST'},pst:{tz:'America/Los_Angeles',label:'PST'}};
+const zparts=(ms,tz)=>{const o={};new Intl.DateTimeFormat('en-US',{timeZone:tz,year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',hourCycle:'h23'}).formatToParts(new Date(ms)).forEach(x=>{o[x.type]=+x.value||0;});return{y:o.year,m:o.month-1,d:o.day,H:o.hour%24,M:o.minute};};
+const wallToMs=(y,m,d,H,M,tz)=>{let g=Date.UTC(y,m,d,H,M);for(let i=0;i<2;i++){const p=zparts(g,tz);g+=Date.UTC(y,m,d,H,M)-Date.UTC(p.y,p.m,p.d,p.H,p.M);}return g;};
+const hasTime=t=>/\d{1,2}:\d{2}/.test(String(t||''));
+const t12=(H,M)=>((H%12)||12)+':'+String(M).padStart(2,'0')+' '+(H<12?'AM':'PM');
+const dkey=(y,m,d)=>y+'-'+m+'-'+d;
+// Where a post sits in a zone: its day there and its "HH:MM" (blank when the post has no time yet).
+const calWhere=(o,zone)=>{const d=o._date;if(!d)return null;const t=o['Time (IST)'];
+  if(!hasTime(t))return{key:dkey(d.getFullYear(),d.getMonth(),d.getDate()),hm:'',sort:-1};
+  const mi=AK.minutesOf(t);const p=zparts(wallToMs(d.getFullYear(),d.getMonth(),d.getDate(),Math.floor(mi/60),mi%60,'Asia/Kolkata'),ZONES[zone].tz);
+  return{key:dkey(p.y,p.m,p.d),hm:String(p.H).padStart(2,'0')+':'+String(p.M).padStart(2,'0'),sort:p.H*60+p.M};};
+// Back to the sheet: a day in the zone ("y-m-d") and "HH:MM" or '' -> IST date "D Mon YYYY" and time "7:30 PM" or ''.
+const toIst=(key,hm,zone)=>{const [y,m,d]=key.split('-').map(Number);if(!hm)return{date:d+' '+AK.MON[m]+' '+y,time:''};
+  const [H,M]=hm.split(':').map(Number);const p=zparts(wallToMs(y,m,d,H,M,ZONES[zone].tz),'Asia/Kolkata');return{date:p.d+' '+AK.MON[p.m]+' '+p.y,time:t12(p.H,p.M)};};
 const dfmt=d=>d.getDate()+' '+AK.MON[d.getMonth()]+' '+d.getFullYear();
 const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
@@ -80,7 +96,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',calZone:store.get('calZone','ist')==='pst'?'pst':'ist',calKind:'All',calEd:{},calLink:null,calLinkVal:'',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -229,8 +245,8 @@ class Component extends DCLogic {
     if(page==='pipeline'){const sent=P.filter(p=>['Sent','Follow-up 1 sent','Follow-up 2 sent'].includes(p.stage)).length;
       h.next=rep.length?rep.length+' people replied and are waiting on us. Calls come next: '+calls.length+' booked.':P.length+' people in the pipeline. '+sent+' have a message out and nobody is waiting on a reply from us.';h.cta=rep.length?'Open replies':'';h.go=rep.length?()=>this.go('inbox'):null;}
     if(page==='inbox'){h.title='Replies and calls';h.next=rep[0]?'Reply to '+rep[0].first+' at '+rep[0].company+'. Then prep for '+(calls[0]?calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:''):'your next call')+'.':calls[0]?'Nobody is waiting on a reply. Prep for '+calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:'')+'.':(()=>{const R=this.postReplies();const b=R.filter(e=>/Core buyer|Robotics/.test(e.Fit||''));return R.length?R.length+(R.length===1?' person':' people')+' replied to our posts'+(b.length?', '+b.length+' in robotics. Start with '+String(b[0].Name||b[0].Handle).split(' ')[0]+'.':'. Reply under their comments.'):'Nobody is waiting on a reply.';})();h.cta=rep[0]?'Reply to '+rep[0].first:calls[0]?'Prep the call':'';h.go=rep[0]?()=>this.openC(rep[0].id):calls[0]?()=>this.openC(calls[0].id):null;}
-    if(page==='calendar'){const today=new Date();const per=this.accs().map(a=>({a,n:this.ownPostsFor(a.acc).filter(p=>p.status!=='Later'&&p.o._date&&AK.sameDay(p.o._date,today)).length})).sort((x,y)=>x.n-y.n);
-      const lo=per[0];h.next=!lo?'':lo.n>=5?'Every account has its 5 posts planned for today.':'Today '+lo.a.name+' has '+lo.n+' of 5 posts planned. '+(5-lo.n)+' more would hit the target.';h.cta='Open Our posts';h.go=()=>this.go('posts');}
+    if(page==='calendar'){const today=new Date();const n=this.postList().filter(p=>onCal(p)&&p.o._date&&AK.sameDay(p.o._date,today)).length;
+      h.next=n?n+' post'+(n===1?' is':'s are')+' on the calendar for today.':'Nothing is on the calendar for today yet.';h.cta='';h.go=null;}
     if(page==='posts'){const tp=this.ownPosts().filter(p=>p.status==='To post');const n=tp[0];
       h.next=n?tp.length+' post'+(tp.length===1?' is':'s are')+' ready to go out. '+n.acc+'’s '+n.comp+' copy ('+n.time.replace(/^[A-Z][a-z]/,x=>x.toLowerCase())+') is next'+(n.q?', and it has a question for the founders.':'.'):'Nothing is waiting to go out. Pick one of the best posts below to copy next.';
       h.cta=n?'Copy our version':'';h.go=n?()=>this.copy(n.text,'hdr','Our version copied'):null;}
@@ -249,7 +265,7 @@ class Component extends DCLogic {
 
   /* ---------- home ---------- */
   homeVals(P){const s=this.state;const E=s.entered;const L=this.lists(P);
-    const today=new Date();const planned=this.ownPosts().filter(p=>p.status!=='Later'&&p.o._date&&AK.sameDay(p.o._date,today)).length;
+    const today=new Date();const planned=this.postList().filter(p=>onCal(p)&&p.o._date&&AK.sameDay(p.o._date,today)).length;
     const fresh=AK.newPosts();const toDM=this.engagers().filter(e=>e.Status!=='Messaged').length;
     const cards=[{label:'Outbound',hint:'DMs we send',dot:'var(--out)',a:String(L.ts.length),aL:'to send today',b:String(L.fu.length),bL:'follow-ups due',go:()=>this.go('send')},{label:'Inbound',hint:'Our posts',dot:'var(--in)',a:String(planned),aL:'posts planned today',b:String(fresh.length),bL:'new competitor posts',go:()=>this.go('calendar')},{label:'Midbound',hint:'People who replied',dot:'var(--mid)',a:String(L.rep.length),aL:'replies waiting',b:String(toDM),bL:'people to DM',go:()=>this.go('inbox')}];
     const raw=[...L.rep.map(p=>({p,k:'r',kind:pill('Reply','mid'),title:'Reply to '+p.name,meta:p.company+(p.result?' · '+clip(p.result,80):''),cta:'Reply'})),...L.fu.map(p=>({p,k:'f',kind:pill('Follow-up','out'),title:this.nextOf(p)+' to '+p.name,meta:(p.role?p.role+' · ':'')+p.company,cta:'Open'})),...L.calls.map(p=>({p,k:'c',kind:pill('Call','mid'),title:'Prep the call with '+p.name,meta:(p.call?p.call+' · ':'')+p.company,cta:'Prep'}))];
@@ -409,43 +425,83 @@ class Component extends DCLogic {
     return o;}
 
   /* ---------- calendar ---------- */
-  calVals(){const s=this.state;const off=s.week;const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],MON=AK.MON;const start=AK.weekStart(off);const now=new Date();const t0=new Date();t0.setHours(0,0,0,0);
-    const days=DOW.map((d,i)=>{const dt=new Date(start.getTime()+i*AK.DAY);const today=AK.sameDay(dt,now);const rel=Math.round((dt-t0)/AK.DAY);const sel=s.calDay===i;return{dow:d,num:String(dt.getDate()),mon:MON[dt.getMonth()],date:dt,rel,today,numBg:today?'var(--ink)':'transparent',numFg:today?'#fff':'var(--ink)',hbg:today?'oklch(0.965 0.02 300 / .55)':'transparent',pick:()=>this.setState({calDay:i}),chipBg:sel?'var(--ink)':'rgba(255,255,255,.75)',chipFg:sel?'#fff':'var(--ink)',chipSub:sel?'rgba(255,255,255,.7)':'var(--ink-3)',chipSh:sel?'0 6px 16px -6px rgba(19,20,24,.45)':'var(--shadow-xs), inset 0 0 0 1px var(--hairline)',todayDot:today?(sel?'#fff':'var(--in)'):'transparent'};});
-    const rows=this.accs().map(a=>({...a,...avatar(avName(a.name)),cells:days.map(d=>this.calCell(a,d))}));
-    const sd=days[s.calDay]||days[0];const dow=(now.getDay()+6)%7;
-    return{days,rows,label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0,calDay:dow}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',dayRows:rows.map(r=>({...r,cell:r.cells[s.calDay]||r.cells[0]})),selDay:sd.dow+' '+sd.num+' '+sd.mon,pick:this.calPickVals()};}
-  dayList(acc,date){return this.postList().filter(p=>p.account===acc&&p.status!=='Later'&&!isOpt(p)&&p.o._date&&AK.sameDay(p.o._date,date)).sort((x,y)=>AK.minutesOf(x.o['Time (IST)'])-AK.minutesOf(y.o['Time (IST)']));}
-  calCell(a,d){
-    const list=this.dayList(a.acc,d.date);const n=list.length;const f=this.founder;
-    const posts=list.map(p=>{const S=CST[p.status]||CST['To post'];const live=p.status==='Posted';
-      return{time:p.o['Time (IST)']||'–',line:firstLine(p.text),st:p.status,dot:S.dot,sbg:S.bg,sfg:S.fg,open:()=>this.openPost(p.id),
-        canX:!f&&!live,x:stop(()=>this.calRemove(p)),drag:!f&&!live?'true':'false',cur:!f&&!live?'grab':'pointer',
-        start:e=>{this.dragId=p.id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',p.id)}catch(_){}},
-        dropOn:e=>{e.preventDefault();e.stopPropagation();this.calDrop(a,d,p.id);}};});
-    return{posts,all:posts,hasAll:n>0,more:'0',hasMore:false,count:n+' of 3',cfg:n>=3?'var(--ok-ink)':(n===0&&d.rel<=0)?'var(--bad-ink)':'var(--ink-3)',segs:[0,1,2].map(k=>({bg:k<n?(CST[list[k].status]||CST['To post']).dot:'var(--n-soft-2)'})),bg:d.today?'oklch(0.965 0.02 300 / .45)':'transparent',none:n===0,emptyLabel:d.rel<0?'Nothing posted':d.rel===0?'Nothing yet':'Nothing planned',
-      canAdd:!f,add:()=>this.setState({calPick:{acc:a.acc,day:d.date.getTime()},calPickKind:'All'}),over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d,null);}};}
-  // Give the day's posts the account's posting slots in the order shown (live posts keep their time).
-  calPlace(acc,date,order){const ds=dfmt(date);const fixed=new Set(order.filter(p=>p.status==='Posted').map(p=>String(p.o['Time (IST)']||'').trim()));
-    const free=[...(SLOTS[acc]||[]),...EXTRA_SLOTS].filter(t=>!fixed.has(t));const moves=[];let i=0;
-    for(const p of order){if(p.status==='Posted')continue;const t=free[i++];const later=/^later/i.test(p.o.Status||'')||/^later/i.test(p.o.Date||'');
-      if(p.o.Date!==ds||String(p.o['Time (IST)']||'').trim()!==t||later)moves.push({o:p.o,date:ds,time:t,status:later?'Ready to post':''});}
-    return moves;}
-  async calMoves(moves,msg){const prev=await AK.movePosts(moves);if(!prev||!prev.length)return !!prev;
-    this.toast(msg,async()=>{if(await AK.movePosts(prev.map(x=>({o:x.o,date:x.date,time:x.time,status:x.status}))))this.toast('Undone');});return true;}
-  async calDrop(a,d,beforeId){if(this.founder)return;const id=this.dragId;this.dragId=null;if(!id||id===beforeId)return;
-    const p=this.postList().find(x=>x.id===id);if(!p||p.status==='Posted')return;
-    if(p.account!==a.acc){this.toast('Drag a post within its own account’s row.',null,true);return;}
-    const day=this.dayList(a.acc,d.date).filter(x=>x.id!==id);let k=beforeId?day.findIndex(x=>x.id===beforeId):-1;if(k<0)k=day.length;day.splice(k,0,p);
-    await this.calMoves(this.calPlace(a.acc,d.date,day),'Moved');}
-  async calRemove(p){await this.calMoves([{o:p.o,date:p.o.Date,time:'Option',status:p.status==='Scheduled'?'Ready to post':''}],'Taken off the calendar. It’s still in Our posts.');}
-  async calAdd(acc,date,p){const day=this.dayList(acc,date);day.push(p);if(await this.calMoves(this.calPlace(acc,date,day),'Added to the calendar'))this.setState({calPick:null});}
-  calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const date=new Date(pk.day);const acc=pk.acc;const kind=s.calPickKind||'All';
-    let C=this.postList().filter(p=>p.account===acc&&p.status!=='Posted'&&(isOpt(p)||p.status==='Later'));
+  calVals(){const s=this.state;const off=s.week;const zone=s.calZone;const f=this.founder;const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],MON=AK.MON;
+    const start=AK.weekStart(off);const t0=new Date();t0.setHours(0,0,0,0);
+    const days=DOW.map((dw,i)=>{const dt=new Date(start.getTime()+i*AK.DAY);const today=AK.sameDay(dt,new Date());
+      return{dow:dw,date:dt,key:dkey(dt.getFullYear(),dt.getMonth(),dt.getDate()),num:String(dt.getDate()),mon:MON[dt.getMonth()],rel:Math.round((dt-t0)/AK.DAY),today};});
+    const keys=new Set(days.map(d=>d.key));const accs=this.accs();
+    const placed=this.postList().filter(onCal).map(p=>({p,w:calWhere(p.o,zone)})).filter(x=>x.w&&keys.has(x.w.key)&&accs.some(a=>a.acc===x.p.account));
+    const kind=s.calKind;const shown=kind==='All'?placed:placed.filter(x=>x.p.kind===kind);
+    const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;const n=k==='All'?placed.length:placed.filter(x=>x.p.kind===k).length;
+      return{label:k,count:String(n),go:()=>this.setState({calKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink)',bd:on?'var(--ink)':'var(--hairline-strong)',dot:KIND_DOT[k]||'transparent',hasDot:k!=='All'};});
+    const zones=['ist','pst'].map(z=>{const on=zone===z;return{label:ZONES[z].label,go:()=>{store.set('calZone',z);this.setState({calZone:z});},bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-3)',sh:on?'var(--shadow-sm)':'none'};});
+    const has=(acc,key)=>placed.some(x=>x.p.account===acc&&x.w.key===key);
+    const empty=accs.reduce((n,a)=>n+days.filter(d=>d.rel>=0&&!has(a.acc,d.key)).length,0);
+    const boards=accs.map(a=>{
+      const gaps=days.filter(d=>d.rel>=0&&!has(a.acc,d.key)).map(d=>d.dow);
+      const last=this.postList().filter(p=>p.account===a.acc&&p.link&&p.when<=Date.now()).sort((x,y)=>y.when-x.when)[0];
+      const line=[gaps.length===7?'Nothing planned this week':gaps.length?'Nothing planned '+gaps.join(', '):'',last?'last post '+dLabel(last.when)+(last.ourViews?': '+last.ourViews+' views':''):''].filter(Boolean).join(' · ');
+      const cols=days.map(d=>{const list=shown.filter(x=>x.p.account===a.acc&&x.w.key===d.key).sort((x,y)=>x.w.sort-y.w.sort);
+        return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:list.map(x=>this.calCard(x.p,x.w,a)),
+          canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'');},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
+          over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d);}};});
+      return{...a,...avatar(avName(a.name)),strip:days.map(d=>({l:d.dow[0],bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols};});
+    return{label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',
+      prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',
+      kinds,zones,boards,summary:placed.length+(placed.length===1?' post':' posts')+' this week',hasEmpty:empty>0,empty:empty+(empty===1?' empty day':' empty days')+' left',pick:this.calPickVals()};}
+  calCard(p,w,a){const s=this.state;const f=this.founder;const o=p.o;const id=p.id;const ed=s.calEd[id]||{};
+    const st=p.link?'Posted':String(o.Status||'Draft');const pc=CAL_PILL[st]||['var(--warn-soft)','var(--warn-ink)'];
+    const setEd=(k,v)=>this.setState(x=>({calEd:{...x.calEd,[id]:{...(x.calEd[id]||{}),[k]:v}}}));
+    const takeEd=k=>{const v=(this.state.calEd[id]||{})[k];if(v==null)return null;this.setState(x=>{const e={...(x.calEd[id]||{})};delete e[k];return{calEd:{...x.calEd,[id]:e}};});return v;};
+    const txt=ed.text!=null?ed.text:p.text;const linkOpen=s.calLink===id;
+    const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id&&!onCal(x)).sort((x,y)=>y.when-x.when).slice(0,5)
+      .map(x=>({line:clip(firstLine(x.text)||x.link,80),when:x.o._date?AK.dayWord(x.o._date):'',pick:()=>this.calLinkTo(p,x)})):[];
+    const media=AK.mediaIds(o['Media file']).map(m=>({src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
+      rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}));
+    const cb=this.copyBtn('cal'+id,'Copy');const up=AK.S.busy.has('up'+o._key);
+    return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,
+      time:ed.time!=null?ed.time:w.hm,zone:ZONES[s.calZone].label,setTime:e=>setEd('time',e.target.value),
+      saveTime:()=>{const v=takeEd('time');if(v!=null&&v!==w.hm){const r=toIst(w.key,v,s.calZone);AK.calSave(o,{date:r.date,time:r.time});}},
+      type:CAL_TYPES.includes(p.ptype)?p.ptype:'',setType:e=>AK.calSave(o,{type:e.target.value}),
+      aimed:CAL_AIMED.includes(o['Aimed at'])?o['Aimed at']:'',setAimed:e=>AK.calSave(o,{aimed:e.target.value}),
+      name:a.name,handle:a.handle,...avatar(avName(a.name)),
+      text:txt,setText:e=>setEd('text',e.target.value),saveText:()=>{const v=takeEd('text');if(v!=null&&v!==p.text)AK.calSave(o,{text:v});},
+      media,hasMedia:media.length>0,
+      status:st,stOpts:[...new Set([st,...CAL_ST])].map(v=>({v})),setStatus:e=>{const v=e.target.value;if(v==='Posted'&&!p.link){this.setState({calLink:id,calLinkVal:''});return;}AK.calSave(o,{status:v});},
+      copy:()=>this.copy(txt,'cal'+id,'Post copied'),copyLabel:cb.label,
+      upload:e=>{const fl=e.target.files&&e.target.files[0];e.target.value='';if(fl)AK.calUpload(o,fl);},upLabel:up?'Uploading…':'Add image',
+      remove:()=>this.calRemove(p),
+      dragStart:e=>{this.dragId=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}},drag:f?'false':'true',
+      hasLink:!!p.link,linkLabel:'Live on X'+(p.ourViews?' · '+p.ourViews+' views':''),openLink:()=>window.open(p.link,'_blank','noopener'),
+      canLink:!p.link&&!f,toggleLink:()=>this.setState({calLink:linkOpen?null:id,calLinkVal:''}),linkOpen,linkVal:s.calLinkVal,
+      setLinkVal:e=>this.setState({calLinkVal:e.target.value}),saveLink:()=>this.calLinkPaste(p,s.calLinkVal),
+      linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0};}
+  // A card made on the calendar that is still empty is removed for good; any other post just leaves the calendar.
+  calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';
+    AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:''}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:'Yes'}));});}
+  calDrop(a,d){if(this.founder)return;const id=this.dragId;this.dragId=null;const p=id&&this.postList().find(x=>x.id===id);if(!p)return;
+    if(p.account!==a.acc){this.toast('Drag a post within its own account.',null,true);return;}
+    const w=calWhere(p.o,this.state.calZone);if(!w||w.key===d.key)return;const r=toIst(d.key,w.hm,this.state.calZone);AK.calSave(p.o,{date:r.date,time:r.time});}
+  // Link a card to a post that's live on X: paste its link, or pick a live post the tracker already found (that row joins the
+  // calendar with the card's format, audience and media, and the card itself leaves so the post isn't counted twice).
+  calLinkPaste(p,v){v=String(v||'').trim();if(!v)return;const l=AK.ourPostLink(v,p.account);
+    const dup=l&&this.postList().find(x=>x.id!==p.id&&x.link&&AK.linkKey(x.link)===AK.linkKey(l));
+    if(dup)return this.calLinkTo(p,dup);
+    AK.calSave(p.o,{link:v}).then(ok=>{if(ok){this.setState({calLink:null,calLinkVal:''});this.toast('Linked. The tracker follows its views and replies.');}});}
+  async calLinkTo(p,x){const f={cal:'Yes'};if(CAL_TYPES.includes(p.ptype)&&!CAL_TYPES.includes(x.ptype))f.type=p.ptype;
+    if(p.o['Aimed at']&&!x.o['Aimed at'])f.aimed=p.o['Aimed at'];if(p.o['Media file']&&!x.o['Media file'])f.media=p.o['Media file'];
+    if(!await AK.calSave(x.o,f))return;
+    const blank=p.o['What we changed']==='Added in the calendar'&&!p.link;
+    await AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:''});this.setState({calLink:null,calLinkVal:''});this.toast('Linked to the live post');}
+  calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const acc=pk.acc;const kind=s.calPickKind||'All';
+    let C=this.postList().filter(p=>p.account===acc&&!p.link&&!onCal(p));
     const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;return{label:k==='All'?'All types':k,count:String(k==='All'?C.length:C.filter(p=>p.kind===k).length),go:()=>this.setState({calPickKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});
     if(kind!=='All')C=C.filter(p=>p.kind===kind);
     C.sort((x,y)=>(y.o._date?y.o._date.getTime():0)-(x.o._date?x.o._date.getTime():0));
-    const items=C.slice(0,30).map(p=>({id:p.id,type:p.ptype||'Post',line:clip(firstLine(p.text)||p.text,150),when:p.o._date?'Drafted '+AK.dayWord(p.o._date).toLowerCase():'Parked for later',needs:p.q?'Needs a founder answer':'',hasNeeds:!!p.q,add:()=>this.calAdd(acc,date,p)}));
-    return{open:true,title:'Add a post to '+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getDay()]+' '+date.getDate()+' '+AK.MON[date.getMonth()],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
+    const r=toIst(pk.key,'',s.calZone);const [y,m,d]=pk.key.split('-').map(Number);const dt=new Date(y,m,d);
+    const items=C.slice(0,30).map(p=>({id:p.id,type:p.ptype||'Post',line:clip(firstLine(p.text)||p.text,150),when:p.o._date?'Drafted '+AK.dayWord(p.o._date).replace(/^(Today|Yesterday|Tomorrow)/,w=>w.toLowerCase()):'Parked for later',needs:p.q?'Needs a founder answer':'',hasNeeds:!!p.q,
+      add:()=>AK.calSave(p.o,{cal:'Yes',date:r.date,time:''}).then(ok=>{if(ok){this.setState({calPick:null});this.toast('Added to the calendar');}})}));
+    return{open:true,title:'Add a draft to '+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]+' '+d+' '+AK.MON[m],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
 
   /* ---------- our posts ---------- */
   postCard(p){const s=this.state;const ST={'To post':'warn','Scheduled':'neutral','Posted':'ok','Later':'ghost'};const k=p.id+'c';const cb=this.copyBtn(k,'Copy our version');let actions=[];
