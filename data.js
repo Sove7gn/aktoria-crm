@@ -19,7 +19,7 @@ const RANGES={
   comps:"'Competitors'!A3:O60",
   people:"'Competitor People'!A3:H200",
   theirs:"'Their Posts'!A3:AB1000",
-  ours:"'Our Posts'!A3:Z500",
+  ours:"'Our Posts'!A3:Z1500",
   draftsK:"'Karan Posts'!A3:U200",
   draftsS:"'Shreenabh Posts'!A3:U200",
   draftsA:"'Aktoria Posts'!A3:U200",
@@ -524,6 +524,17 @@ async function saveMessaged(e,opt){
   }catch(err){toast("Couldn't save: "+(err&&err.message||err),true)}
   S.busy.delete(e._key);emit();return ok;
 }
+/* Clear a reply off the to-do lists (x): Status "Dismissed"; Undo puts the old status back. */
+async function saveEngager(e,status){
+  const prev=e.Status||"To message";
+  S.messagedLocal[e._row]={undo:true,status,when:e["Messaged on"]||"",at:Date.now()};build();emit();
+  try{
+    if(S.mcp)await putCells("'Post Engagers'!P"+e._row,[[status]]);
+    else await scriptCall({action:"engager",row:e._row,handle:e.Handle,status});
+    if(S.pub)goLive();else reloadRange("engagers");
+    return prev;
+  }catch(err){delete S.messagedLocal[e._row];build();emit();toast("Couldn't save: "+(err&&err.message||err),true);return false}
+}
 async function saveScheduled(p,on,opt){
   opt=opt||{};
   const status=on?"Scheduled":"Ready to post";
@@ -853,7 +864,7 @@ window.AK={
   num,fmtK,safeUrl,xUrl,host,parseDate,cellDate,sheetSerial,fmtSerial,ago,plain,firstName,norm,median,weekStart,sameDay,dayWord,folderUrl,
   bucket,fundKind,sendable,messages,statusCells,undoCells,write,canEdit,canRestore,
   postStage,minutesOf,linkKey,originalFor,copiesOf,rate,ourEng,isNew,newPosts,markSeen,ourPostLink,
-  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,movePosts,calNew,calSave,calUpload,mediaIds,
+  savePosted,saveScheduled,saveMessaged,restorePost,restoreMessaged,dmsPaused,savePaused,deletePost,undeletePost,addPost,movePosts,calNew,calSave,calUpload,mediaIds,saveEngager,
   typeStats,copyNext,founderAsks,trackedPosts,whyFor,patterns,weekGrid,dmResults,viewsOf,bigFirst,compFor,
 };
 start();

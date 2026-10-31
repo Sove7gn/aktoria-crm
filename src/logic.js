@@ -28,9 +28,10 @@ const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Sched
 // Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
 const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
 const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
-// Calendar (31 Oct): one board per account, a column per day. Only posts the team puts there show (Our Posts column Z
-// "Calendar" = Yes); nothing is filled in on its own. The sheet keeps times in IST; the board shows them in IST or Pacific time.
-const onCal=p=>/^yes$/i.test(String(p.o.Calendar||'').trim());
+// Calendar (31 Oct): one board per account, a column per day. Posts the team puts there (Our Posts column Z "Calendar" =
+// Yes) plus everything posted or scheduled; drafts never land there on their own. The sheet keeps times in IST; the board shows them in IST or Pacific time.
+// Posted and scheduled posts show on their own (31 Oct ask); Calendar "No" = someone took it off with the bin.
+const onCal=p=>{const c=String(p.o.Calendar||'').trim().toLowerCase();return c==='yes'||(c!=='no'&&(!!p.link||p.status==='Scheduled'));};
 const CAL_TYPES=['Lead magnet','Founder story','Data post','Tagging post','How it works','Contrarian take','Company news','Behind the scenes','Operator floor data'];
 const CAL_AIMED=['Data buyers','Robot builders','Robot deployers','Everyone in robotics'];
 const CAL_ST=['Draft','Ready to post','Scheduled','Posted'];
@@ -199,7 +200,7 @@ class Component extends DCLogic {
     if(f==='Desktop 1280')return{w:'1280px',h:'820px',r:'16px',s:'0 0 0 1px rgba(19,20,24,.08), 0 40px 100px -40px rgba(0,0,0,.35)',m:'32px',phone:false,tabPad:'8px'};
     return{w:'100%',h:'100vh',r:'0px',s:'none',m:'0px',phone:false,tabPad:'8px'};}
   engagers(){return AK.M.engagers.filter(e=>this.own(e.Account));}
-  counts(P){const L=this.lists(P);return{send:L.ts.length+L.fu.length,inbox:L.rep.length+L.calls.length+this.postReplies().length,pdm:this.engagers().filter(e=>e.Status!=='Messaged').length};}
+  counts(P){const L=this.lists(P);return{send:L.ts.length+L.fu.length,inbox:L.rep.length+L.calls.length+this.postReplies().length,pdm:this.engagers().filter(e=>e.Status!=='Messaged'&&e.Status!=='Dismissed').length};}
   navVals(c){const s=this.state;const badges={send:c.send,inbox:c.inbox,pdm:c.pdm};
     return SECS.map(sec=>({label:sec.label,hint:sec.hint||'',hasHead:sec.id!=='home',accent:ACC[sec.id].c,pages:sec.pages.map(id=>{const on=s.page===id;const b=badges[id]||0;return{label:PAGES[id].label,go:()=>this.go(id),bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-2)',fw:on?'600':'450',sh:on?'var(--shadow-sm), var(--hi)':'none',dot:on?ACC[sec.id].c:'transparent',dotS:on?'scale(1)':'scale(.4)',hasBadge:b>0,badge:String(b),badgeBg:on?ACC[sec.id].c:ACC[sec.id].soft,badgeFg:on?'#fff':ACC[sec.id].ink};})}));}
   ownerVals(){return OWNERS.map(o=>{const on=this.state.owner===o;const a=o==='Everyone'?{avBg:'var(--n-soft-2)',avFg:'var(--ink-2)',ini:'∗'}:avatar(avName(o));return{label:o,...a,pick:()=>this.setOwner(o),bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-3)',sh:on?'var(--shadow-sm), var(--hi)':'none'};});}
@@ -343,7 +344,8 @@ class Component extends DCLogic {
       if(kind==='skip')actions=[act('Send anyway','ghost',stop(()=>{const any={...this.state.anyway,[p.id]:true};store.set('anyway',any);this.setState({anyway:any});this.toast(p.first+' moved to Send today (on this browser)',()=>{const x={...this.state.anyway};delete x[p.id];store.set('anyway',x);this.setState({anyway:x});this.toast('Undone');});}))];
       if(kind==='noreply')actions=[act('Mark as no reply','secondary',stop(()=>this.setStage(p.id,'Closed','Closed '+p.first+': no reply')))];
       if(kind==='reply')actions=[act('Reply now','mid',stop(()=>this.openC(p.id)))];
-      if(kind==='call')actions=[act('Prep the call','mid',stop(()=>this.openC(p.id)))];}
+      if(kind==='call')actions=[act('Prep the call','mid',stop(()=>this.openC(p.id)))];
+      if(kind!=='call')actions.push(act('×','ghost',stop(()=>this.dismissPerson(p))));}
     const nx=this.nextOf(p);
     return{...a,id:p.id,name:p.name,role:p.role||'–',company:p.company,fund:this.fundPill(p),next:pill(nx,NEXT_T[nx]),actions,open:()=>this.openC(p.id),bt:i===0?'none':'1px solid var(--hairline)',op:lv?'0':'1',tf:lv?'translateX(24px)':'none',mh:lv?'0px':'240px',py:lv?'0px':'var(--row-py)',said:p.said,hasSaid:kind==='reply'&&!!p.said,saidWhen:p.saidWhen,hasCall:kind==='call'&&!!p.call,call:p.call,ownerIni:p.owner[0],owner:p.owner};}
   group(id,title,help,list,kind,lim=5){const n=this.state.more[id]||lim;const shown=list.slice(0,n);return{id,title,help,count:String(list.length),rows:shown.map((p,i)=>this.row(p,i,kind)),hasMore:list.length>n,moreN:String(Math.min(20,list.length-n)),more:()=>this.setState(s=>({more:{...s.more,[id]:n+20}})),show:list.length>0};}
@@ -364,7 +366,8 @@ class Component extends DCLogic {
     const said=String(e['What they said']||'').replace(/^(@\w+\s*)+/,'');const reply=e['Our reply']||'';const owner=ownerName(e.Account);
     const FT={'Core buyer':'solid','Robotics leader':'solid','Robotics':'mid'};
     const actions=this.founder?[]:[...(reply?[act(cb.label,s.copied===key?'copied':'secondary',stop(()=>this.copy(reply,key,'Reply for '+name.split(' ')[0]+' copied')))]:[]),
-      act('Open their reply','primary',stop(()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');})),act('DM','secondary',stop(()=>this.go('pdm',{pdmTab:'To message'})))];
+      act('Open their reply','primary',stop(()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');})),act('DM','secondary',stop(()=>this.go('pdm',{pdmTab:'To message'}))),
+      act('×','ghost',stop(()=>this.dismissEngager(e,name)))];
     return{...a,id:e._key,name,role:e.Handle+' · '+(num(e.Followers)!=null?fmtK(num(e.Followers))+' followers':''),company:(e.How==='Quoted'?'Quoted ':'Replied to ')+owner+'’s post',
       fund:pill(e.Fit||'Other',FT[e.Fit]||'neutral'),next:pill(reply?'Reply ready':'Reply being written','mid'),actions,open:()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');},
       bt:i===0?'none':'1px solid var(--hairline)',op:'1',tf:'none',mh:'240px',py:'var(--row-py)',said:clip(said,160)+(reply?'  →  Our reply: '+reply:''),hasSaid:true,saidWhen:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',
@@ -454,12 +457,12 @@ class Component extends DCLogic {
     const setEd=(k,v)=>this.setState(x=>({calEd:{...x.calEd,[id]:{...(x.calEd[id]||{}),[k]:v}}}));
     const takeEd=k=>{const v=(this.state.calEd[id]||{})[k];if(v==null)return null;this.setState(x=>{const e={...(x.calEd[id]||{})};delete e[k];return{calEd:{...x.calEd,[id]:e}};});return v;};
     const txt=ed.text!=null?ed.text:p.text;const linkOpen=s.calLink===id;
-    const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id&&!onCal(x)).sort((x,y)=>y.when-x.when).slice(0,5)
+    const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id).sort((x,y)=>y.when-x.when).slice(0,5)
       .map(x=>({line:clip(firstLine(x.text)||x.link,80),when:x.o._date?AK.dayWord(x.o._date):'',pick:()=>this.calLinkTo(p,x)})):[];
     const media=AK.mediaIds(o['Media file']).map(m=>({src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
       rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}));
     const cb=this.copyBtn('cal'+id,'Copy');const up=AK.S.busy.has('up'+o._key);
-    return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,
+    return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,txtRo:f||!!p.link,rows:p.link?'4':'7',notLive:!p.link,canUp:!f&&!p.link,
       time:ed.time!=null?ed.time:w.hm,zone:ZONES[s.calZone].label,setTime:e=>setEd('time',e.target.value),
       saveTime:()=>{const v=takeEd('time');if(v!=null&&v!==w.hm){const r=toIst(w.key,v,s.calZone);AK.calSave(o,{date:r.date,time:r.time});}},
       type:CAL_TYPES.includes(p.ptype)?p.ptype:'',setType:e=>AK.calSave(o,{type:e.target.value}),
@@ -477,8 +480,8 @@ class Component extends DCLogic {
       setLinkVal:e=>this.setState({calLinkVal:e.target.value}),saveLink:()=>this.calLinkPaste(p,s.calLinkVal),
       linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0};}
   // A card made on the calendar that is still empty is removed for good; any other post just leaves the calendar.
-  calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';
-    AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:''}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:'Yes'}));});}
+  calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';const wasCal=p.o.Calendar||'';
+    AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:'No'}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:wasCal}));});}
   calDrop(a,d){if(this.founder)return;const id=this.dragId;this.dragId=null;const p=id&&this.postList().find(x=>x.id===id);if(!p)return;
     if(p.account!==a.acc){this.toast('Drag a post within its own account.',null,true);return;}
     const w=calWhere(p.o,this.state.calZone);if(!w||w.key===d.key)return;const r=toIst(d.key,w.hm,this.state.calZone);AK.calSave(p.o,{date:r.date,time:r.time});}
@@ -579,16 +582,22 @@ class Component extends DCLogic {
       fol,top,hasTop:top.length>0,noTop:!top.length,pat,hasPat:pat.length>0,noPat:!pat.length,rows,hasRows:rows.length>0,hasMore:!s.trkMore&&sorted.length>8,more:()=>this.setState({trkMore:true}),count:'Showing '+rows.length+' of '+sorted.length};}
 
   /* ---------- people to DM ---------- */
-  pdmCards(){return this.engagers().map(e=>({id:e._key,e,name:e.Name||e.Handle,handle:e.Handle,followers:fmtK(num(e.Followers)),fit:e.Fit||'Other',dms:e['DMs open']==='Yes',bio:e.Bio||'No bio.',said:String(e['What they said']||'').replace(/^(@\w+\s*)+/,'')||'(no text)',kind:e.How==='Quoted'?'Quoted':'Replied to',on:clip(e['Our post'],90),when:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',msg:e['DM ready']||'',status:e.Status==='Messaged'?'Messaged':'To message',from:e['Send from']||e.Account}));}
+  pdmCards(){return this.engagers().filter(e=>e.Status!=='Dismissed').map(e=>({id:e._key,e,name:e.Name||e.Handle,handle:e.Handle,followers:fmtK(num(e.Followers)),fit:e.Fit||'Other',dms:e['DMs open']==='Yes',bio:e.Bio||'No bio.',said:String(e['What they said']||'').replace(/^(@\w+\s*)+/,'')||'(no text)',kind:e.How==='Quoted'?'Quoted':'Replied to',on:clip(e['Our post'],90),when:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',msg:e['DM ready']||'',status:e.Status==='Messaged'?'Messaged':'To message',from:e['Send from']||e.Account}));}
   pdmVals(){const s=this.state;const ORDER={'Robotics leader':0,'Robotics':1,'Investor':2,'Other':3,'Not a buyer':4};const FT={'Robotics leader':'solid','Robotics':'mid','Investor':'neutral','Other':'neutral','Not a buyer':'ghost'};
     const all=this.pdmCards().sort((a,b)=>((ORDER[a.fit]??3)-(ORDER[b.fit]??3))||((b.dms?1:0)-(a.dms?1:0))||((num(b.e.Followers)||0)-(num(a.e.Followers)||0)));const by=t=>t==='All'?all:all.filter(p=>p.status===t);
     const tabs=this.tabs([['To message',String(by('To message').length)],['Messaged',String(by('Messaged').length)],['All',String(all.length)]],s.pdmTab,t=>this.setState({pdmTab:t}));
     const cards=by(s.pdmTab).slice(0,s.more.pdm||12).map((p,i)=>{const k=p.id+'d';const cb=this.copyBtn(k,'Copy');const lv=!!s.leaving[p.id];
       return{...p,...avatar(p.name),fitP:pill(p.fit,FT[p.fit]||'neutral'),dmsLabel:p.dms?'DMs open':'DMs closed',dmsDot:p.dms?'var(--ok)':'var(--ink-4)',dmsFg:p.dms?'var(--ok-ink)':'var(--ink-3)',copyLabel:cb.label,cbg:cb.bg,cfg:cb.fg,csh:cb.sh,copy:()=>this.copy(p.msg,k,'Message for '+p.name.split(' ')[0]+' copied'),canMark:p.status==='To message'&&!this.founder,isDone:p.status==='Messaged',
-        mark:()=>this.markMessaged(p),
+        mark:()=>this.markMessaged(p),canX:!this.founder,x:()=>this.dismissEngager(p.e,p.name),
         profile:e=>{e.preventDefault();open(AK.xUrl(p.handle));},op:lv?'0':(s.entered?'1':'0'),tf:lv?'scale(.96) translateY(8px)':(s.entered?'none':'translateY(10px)'),dl:lv?'0ms':(i*50)+'ms'};});
     const n=by(s.pdmTab).length;const lim=s.more.pdm||12;
     return{tabs,cards,empty:cards.length===0,hasCards:cards.length>0,emptyTitle:s.pdmTab==='Messaged'?'Nobody messaged yet':'Everyone here has a message',hasMore:n>lim,moreN:String(Math.min(12,n-lim)),more:()=>this.setState(st=>({more:{...st.more,pdm:lim+12}}))};}
+  // x on a reply or a person to DM: off every list (Status "Dismissed" in Post Engagers), with Undo.
+  async dismissEngager(e,name){if(this.founder)return;const prev=await AK.saveEngager(e,'Dismissed');
+    if(prev)this.toast('Cleared '+String(name||e.Handle).split(' ')[0],async()=>{if(await AK.saveEngager(e,prev))this.toast('Undone');});}
+  // x on a DM row: the person moves to Closed in the pipeline (sheet Status "Not now"), with Undo.
+  async dismissPerson(p){if(this.founder)return;const was=p.stage;await this.setStage(p.id,'Closed','Cleared '+p.first+'. They’re under Closed in Pipeline.');
+    const q=this.findP(p.id);if(q&&q.stage==='Closed')this.toast('Cleared '+p.first+'. They’re under Closed in Pipeline.',()=>this.setStage(p.id,was,'Undone'));}
   markMessaged(p){if(this.founder)return;const prevS=p.e.Status||'',prevW=p.e['Messaged on']||'';
     this.setState(st=>({leaving:{...st.leaving,[p.id]:true}}));
     setTimeout(async()=>{const ok=await AK.saveMessaged(p.e,{quiet:true});

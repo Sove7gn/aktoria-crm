@@ -113,6 +113,11 @@ c1 = src.index('<sc-if value="{{ is.posts }}">')
 assert c0 < c1 and src.count('<sc-if value="{{ is.calendar }}">') == 1
 src = src[:c0] + open(os.path.join(HERE, "calendar.html"), encoding="utf-8").read().strip() + "\n\n" + src[c1:]
 
+# ---------- people to DM: x clears a person off the list (Status "Dismissed") ----------
+rep('">Mark messaged</button></sc-if>',
+    '">Mark messaged</button></sc-if>'
+    '<sc-if value="{{ c.canX }}"><button onClick="{{ c.x }}" title="Clear from this list" style="height:var(--btn-h-sm); width:var(--btn-h-sm); margin-left:6px; border:0; border-radius:var(--r-btn); background:transparent; color:var(--ink-3); font-size:16px; line-height:1; cursor:pointer;" style-hover="background:var(--n-soft); color:var(--ink);">×</button></sc-if>')
+
 # ---------- send today ----------
 rep('<span style="font-size:var(--fs-lg); font-weight:600;">Everything for today is sent</span>',
     '<span style="font-size:var(--fs-lg); font-weight:600;">{{ send.clearTitle }}</span>')
