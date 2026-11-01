@@ -19,7 +19,7 @@ const RANGES={
   comps:"'Competitors'!A3:O60",
   people:"'Competitor People'!A3:H200",
   theirs:"'Their Posts'!A3:AB1000",
-  ours:"'Our Posts'!A3:Z1500",
+  ours:"'Our Posts'!A3:AA1500",
   draftsK:"'Karan Posts'!A3:U200",
   draftsS:"'Shreenabh Posts'!A3:U200",
   draftsA:"'Aktoria Posts'!A3:U200",

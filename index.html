@@ -228,12 +228,14 @@ class Component extends DCLogic {
     const time=st==='later'?'Later':o._date?AK.dayWord(o._date)+(o['Time (IST)']?', '+o['Time (IST)']+' IST':''):'Not set';
     const cNums=!t?'Its numbers aren’t saved in Their posts':t._li?fmtK(num(t.Reactions))+' reactions · '+fmtK(num(t.Comments))+' comments':(num(t.Views)?fmtK(num(t.Views))+' views · ':'')+fmtK(num(t.Likes))+' likes';
     const ptype=String(o['Post type']||'').trim();
+    // Suggested media (Our Posts AA, filled by the aktoria-media-picks task): "File name | Drive link | why it fits".
+    const sg=String(o['Suggested media']||'').split('|').map(x=>x.trim());const sugUrl=AK.safeUrl(sg[1]||'');
     return {id:o._key,o,status,ptype,kind:kindOf(ptype),comp,compH:t?(t.Account||'')+(t.Platform?' · '+t.Platform:''):(o.Platform||'X'),
       rankLabel:(ptype?ptype+' · ':'')+(t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet'),rankOf:comp,
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
       tipText:'Where this post ranks among the '+comp+' posts we saved, by views. #1 is their biggest one.'+(o['What we changed']&&o.Competitor!=='Our own'?' What we changed: '+String(o['What we changed']).split('\n').map(x=>x.trim()).filter(Boolean).join('; '):''),
-      media:media||'No media needed',needsMedia,folder,q:o['Founder question']||'',link:o['Posted link']||'',
+      media:media||'No media needed',needsMedia,folder,sug:sugUrl?{name:sg[0]||'Open file',url:sugUrl,why:sg[2]||''}:null,q:o['Founder question']||'',link:o['Posted link']||'',
       ourViews:ov!=null?fmtK(ov):'',ourLikes:ol!=null?fmtK(ol):'0',when:(o._date?o._date.getTime():9e15)+AK.minutesOf(o['Time (IST)'])*6e4};
   }
   postList(){const v=AK.version();if(this._opv!==v){this._opv=v;this._posts=AK.M.ours.map(o=>this.postObj(o));}return this._posts;}
@@ -501,7 +503,8 @@ class Component extends DCLogic {
       hasLink:!!p.link,linkLabel:'Live on X'+(p.ourViews?' · '+p.ourViews+' views':''),openLink:()=>window.open(p.link,'_blank','noopener'),
       canLink:!p.link&&!f,toggleLink:()=>this.setState({calLink:linkOpen?null:id,calLinkVal:''}),linkOpen,linkVal:s.calLinkVal,
       setLinkVal:e=>this.setState({calLinkVal:e.target.value}),saveLink:()=>this.calLinkPaste(p,s.calLinkVal),
-      linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0};}
+      linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0,
+      hasSug:!!p.sug&&!p.link&&!media.length,sugName:p.sug?clip(p.sug.name,34):'',sugWhy:p.sug?p.sug.why:'',openSug:()=>p.sug&&window.open(p.sug.url,'_blank','noopener')};}
   // A card made on the calendar that is still empty is removed for good; any other post just leaves the calendar.
   calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';const wasCal=p.o.Calendar||'';
     AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:'No'}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:wasCal}));});}
@@ -539,7 +542,8 @@ class Component extends DCLogic {
     const qk=p.id+'q';const qb=this.copyBtn(qk,'Copy for WhatsApp');
     return{...p,...avatar(p.comp),accAv:avatar(avName(p.acc)),accName:p.acc,st:pill(p.status,ST[p.status]),hasQ:!!p.q,hasNums:!!p.ourViews,noNums:!p.ourViews,actions,hasActions:actions.length>0,needsMedia:p.needsMedia,
       linkOpen:s.linkFor===p.id,linkVal:s.linkVal,linkPh:'Paste the link of '+p.acc+'’s post on X (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',onLink:e=>this.setState({linkVal:e.target.value}),saveLink:()=>this.markPosted(p),cancelLink:()=>this.setState({linkFor:null}),
-      compare:()=>this.setState({cmpId:p.id,cmpOn:true}),copyQ:()=>this.copy('Question for Aktoria: '+p.q,qk,'Question copied for WhatsApp'),qLabel:qb.label,qbg:qb.bg,qfg:qb.fg,qsh:qb.sh,openDrive:e=>{e.preventDefault();if(p.folder)open(AK.folderUrl(p.folder.id));else this.toast('No Drive folder is set for this post in the sheet.',null,true);},tip:this.tipFor('rank'+p.id)};}
+      compare:()=>this.setState({cmpId:p.id,cmpOn:true}),copyQ:()=>this.copy('Question for Aktoria: '+p.q,qk,'Question copied for WhatsApp'),qLabel:qb.label,qbg:qb.bg,qfg:qb.fg,qsh:qb.sh,openDrive:e=>{e.preventDefault();if(p.folder)open(AK.folderUrl(p.folder.id));else this.toast('No Drive folder is set for this post in the sheet.',null,true);},
+      hasSug:!!p.sug&&p.status!=='Posted',sugName:p.sug?clip(p.sug.name,40):'',sugWhy:p.sug?p.sug.why:'',openSug:e=>{e.preventDefault();if(p.sug)open(p.sug.url);},tip:this.tipFor('rank'+p.id)};}
   async markScheduled(p){if(this.founder)return;const prev=p.o.Status||'';
     const ok=await AK.saveScheduled(p.o,true,{quiet:true});
     if(ok)this.toast('Marked as scheduled',AK.canRestore()?()=>this.restorePost(p,prev):null);}
@@ -1484,6 +1488,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </div>
 <textarea value="{{ k.text }}" onChange="{{ k.setText }}" onBlur="{{ k.saveText }}" disabled="{{ k.txtRo }}" placeholder="Write the post…" rows="{{ k.rows }}" style="width:100%; box-sizing:border-box; padding:2px 0; border:0; background:transparent; font-size:var(--fs-sm); line-height:1.5; font-family:inherit; color:var(--ink); resize:vertical; outline:none;"></textarea>
 <sc-if value="{{ k.hasMedia }}"><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px;"><sc-for list="{{ k.media }}" as="m"><div style="position:relative;"><img src="{{ m.src }}" onClick="{{ m.open }}" alt="Attached media" style="display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:var(--n-soft); cursor:pointer;"><sc-if value="{{ m.canRm }}"><button onClick="{{ m.rm }}" title="Remove" style="position:absolute; top:5px; right:5px; width:22px; height:22px; border:0; border-radius:50%; background:rgba(19,20,24,.7); color:#fff; font-size:13px; line-height:1; cursor:pointer;">×</button></sc-if></div></sc-for></div></sc-if>
+<sc-if value="{{ k.hasSug }}"><button onClick="{{ k.openSug }}" title="{{ k.sugWhy }}" style="align-self:flex-start; display:inline-flex; align-items:center; gap:6px; max-width:100%; height:28px; padding:0 12px; border:0; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-xs); font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">★ Use: {{ k.sugName }} ↗</button></sc-if>
 <sc-if value="{{ k.hasLink }}"><button onClick="{{ k.openLink }}" style="align-self:flex-start; height:28px; padding:0 12px; border:0; border-radius:var(--r-pill); background:var(--ok-soft); color:var(--ok-ink); font-size:var(--fs-xs); font-weight:600; cursor:pointer;">{{ k.linkLabel }} ↗</button></sc-if>
 <sc-if value="{{ k.linkOpen }}">
 <div style="display:flex; flex-direction:column; gap:8px; padding:10px; border-radius:10px; background:var(--n-soft);">
@@ -1546,6 +1551,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span onMouseEnter="{{ p.tip.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ p.tip.show }}" style="position:relative; display:inline-grid; place-items:center; width:14px; height:14px; border-radius:50%; font-family:var(--font-mono); font-size:8.5px; font-weight:600; box-shadow:inset 0 0 0 1px var(--in-line); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-12px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ p.tip.op }}; transform:{{ p.tip.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">{{ p.tipText }}</span></span>
 </span>
 <span style="display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border-radius:var(--r-pill); font-size:var(--fs-2xs); color:var(--ink-2); background:var(--n-soft);">{{ p.media }}</span>
+<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);">★ Use: {{ p.sugName }} ↗</a></sc-if>
 <sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}" style="font-size:var(--fs-2xs); font-weight:500; color:var(--in-ink); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--in-line);" style-hover="color:var(--ink);">Drive folder ↗</a></sc-if>
 <button onClick="{{ p.compare }}" title="Compare full screen" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 10px; border:0; border-radius:var(--r-btn); background:transparent; font-size:var(--fs-xs); font-weight:500; color:var(--ink-2); cursor:pointer; transition:all var(--dur);" style-hover="background:rgba(255,255,255,.85); color:var(--ink); box-shadow:var(--shadow-xs);">
 <svg width="13" height="13" viewBox="0 0 24 24" style="fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>Full screen</button>
