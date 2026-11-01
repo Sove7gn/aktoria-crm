@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Aktoria CRM</title>
+<style>.ak-board::-webkit-scrollbar{height:10px}.ak-board::-webkit-scrollbar-thumb{background:rgba(19,20,24,.22);border-radius:6px}.ak-board::-webkit-scrollbar-track{background:rgba(19,20,24,.05);border-radius:6px}.ak-board{scrollbar-color:rgba(19,20,24,.25) rgba(19,20,24,.05)}</style>
 <script src="./data.js"></script>
 <script>
 /* The Aktoria CRM page logic: the Claude Design component (Aktoria CRM.dc.html), with its sample data replaced by
@@ -457,10 +458,23 @@ class Component extends DCLogic {
         return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:list.map(x=>this.calCard(x.p,x.w,a)),
           canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'');},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
           over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d);}};});
-      return{...a,...avatar(avName(a.name)),strip:days.map(d=>({l:d.dow[0],bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols};});
+      const ti=days.findIndex(d=>d.today);
+      return{...a,...avatar(avName(a.name)),strip:days.map((d,i)=>({l:d.dow[0],full:d.dow+' '+d.num+' '+d.mon,go:()=>this.calScroll(a.acc,i),bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols,
+        sid:'cal-'+a.acc,pan:e=>this.calPan(e),left:()=>this.calScroll(a.acc,'l'),right:()=>this.calScroll(a.acc,'r'),today:()=>{if(ti<0)this.setState({week:0});this.calScroll(a.acc,Math.max(0,ti<0?(new Date().getDay()+6)%7:ti));}};});
+    // Open each board on today's column (once per week shown); the page may still be drawing, so try for a moment.
+    const sk=off+'|'+accs.map(a=>a.acc).join();if(this._calSk!==sk){this._calSk=sk;const ti=days.findIndex(d=>d.today);let n=0;
+      const go=()=>{if(accs.every(a=>document.getElementById('cal-'+a.acc))){accs.forEach(a=>this.calScroll(a.acc,ti<0?0:ti,true));}else if(n++<40)setTimeout(go,100);};setTimeout(go,50);}
     return{label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',
       prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',
       kinds,zones,boards,summary:placed.length+(placed.length===1?' post':' posts')+' this week',hasEmpty:empty>0,empty:empty+(empty===1?' empty day':' empty days')+' left',pick:this.calPickVals()};}
+  // Hold and drag the board's empty space to move left and right (cards, fields and buttons keep working as usual).
+  calPan(e){if(e.button!==0||e.target.closest('input,textarea,select,button,label,a,img,[draggable="true"]'))return;
+    const el=e.currentTarget,x0=e.clientX,l0=el.scrollLeft;el.style.cursor='grabbing';e.preventDefault();
+    const move=ev=>{el.scrollLeft=l0-(ev.clientX-x0);};const up=()=>{el.style.cursor='grab';window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',up);};
+    window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);}
+  // Scroll a board: 'l' / 'r' by two days, or to day i (0 = Monday).
+  calScroll(acc,where,instant){const el=document.getElementById('cal-'+acc);if(!el||!el.children.length)return;const w=el.children[0].getBoundingClientRect().width+12;const behavior='auto';
+    if(where==='l'||where==='r')el.scrollBy({left:(where==='l'?-2:2)*w,behavior});else el.scrollTo({left:Math.max(0,where-1)*w,behavior});}
   calCard(p,w,a){const s=this.state;const f=this.founder;const o=p.o;const id=p.id;const ed=s.calEd[id]||{};
     const st=p.link?'Posted':String(o.Status||'Draft');const pc=CAL_PILL[st]||['var(--warn-soft)','var(--warn-ink)'];
     const setEd=(k,v)=>this.setState(x=>({calEd:{...x.calEd,[id]:{...(x.calEd[id]||{}),[k]:v}}}));
@@ -1444,10 +1458,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <section style="display:flex; flex-direction:column; gap:10px; padding-top:var(--s-2);">
 <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
 <span style="display:inline-flex; align-items:center; gap:9px; height:38px; padding:0 16px 0 6px; border-radius:var(--r-pill); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong);"><span style="width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--ink); color:#fff; font-size:13px; font-weight:700;">𝕏</span><span style="font-size:var(--fs-sm); font-weight:600;">{{ b.handle }}</span></span>
-<div style="display:flex; gap:5px;"><sc-for list="{{ b.strip }}" as="d"><span style="display:flex; flex-direction:column; align-items:center; gap:4px;"><span style="font-size:var(--fs-3xs); font-weight:{{ d.fw }}; color:{{ d.fg }};">{{ d.l }}</span><span style="width:30px; height:8px; border-radius:3px; background:{{ d.bg }};"></span></span></sc-for></div>
+<div style="display:flex; gap:5px;"><sc-for list="{{ b.strip }}" as="d"><button onClick="{{ d.go }}" title="Go to {{ d.full }}" style="display:flex; flex-direction:column; align-items:center; gap:4px; padding:0; border:0; background:transparent; cursor:pointer;"><span style="font-size:var(--fs-3xs); font-weight:{{ d.fw }}; color:{{ d.fg }};">{{ d.l }}</span><span style="width:30px; height:8px; border-radius:3px; background:{{ d.bg }};"></span></button></sc-for></div>
+<div style="margin-left:auto; display:flex; align-items:center; gap:6px;"><button onClick="{{ b.left }}" title="Earlier days" style="width:36px; height:36px; border:0; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:16px; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">‹</button><button onClick="{{ b.today }}" style="height:36px; padding:0 14px; border:0; border-radius:var(--r-pill); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); font-weight:600; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">Today</button><button onClick="{{ b.right }}" title="Later days" style="width:36px; height:36px; border:0; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:16px; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">›</button></div>
 </div>
 <sc-if value="{{ b.hasLine }}"><span style="font-size:var(--fs-sm); color:var(--ink-3);">{{ b.line }}</span></sc-if>
-<div style="display:flex; align-items:flex-start; gap:12px; overflow-x:auto; padding-bottom:10px; scroll-snap-type:x proximity;">
+<div id="{{ b.sid }}" class="ak-board" onMouseDown="{{ b.pan }}" style="display:flex; align-items:flex-start; gap:12px; overflow-x:auto; padding-bottom:12px; cursor:grab; user-select:none;">
 <sc-for list="{{ b.cols }}" as="c">
 <div onDragOver="{{ c.over }}" onDrop="{{ c.drop }}" style="flex:0 0 276px; max-width:84vw; scroll-snap-align:start; display:flex; flex-direction:column; gap:10px; padding:12px; border-radius:16px; background:{{ c.bg }};">
 <div style="display:flex; align-items:baseline; gap:6px; padding:2px 4px;"><span style="font-size:var(--fs-md); font-weight:700; color:{{ c.hfg }};">{{ c.dow }}</span><span style="font-size:var(--fs-sm); color:var(--ink-3);">{{ c.date }}</span></div>
@@ -1459,12 +1474,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span style="font-family:var(--font-mono); font-size:var(--fs-3xs); color:var(--ink-4);">{{ k.zone }}</span>
 <sc-if value="{{ k.canEdit }}"><button onClick="{{ k.remove }}" title="Take off the calendar" style="margin-left:auto; width:28px; height:28px; border:0; border-radius:7px; display:grid; place-items:center; background:transparent; color:var(--ink-3); cursor:pointer;" style-hover="background:var(--n-soft); color:var(--ink);"><svg width="15" height="15" viewBox="0 0 24 24" style="fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;"><polyline points="4 7 20 7"></polyline><path d="M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button></sc-if>
 </div>
-<div style="display:flex; gap:6px; flex-wrap:wrap;">
-<select value="{{ k.type }}" onChange="{{ k.setType }}" disabled="{{ k.ro }}" aria-label="Format" style="height:32px; padding:0 8px; border:0; border-radius:8px; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); color:var(--ink-2); cursor:pointer;"><option value="">Format…</option><option value="Lead magnet">Lead magnet</option><option value="Founder story">Founder story</option><option value="Data post">Data post</option><option value="Tagging post">Tagging post</option><option value="How it works">How it works</option><option value="Contrarian take">Contrarian take</option><option value="Company news">Company news</option><option value="Behind the scenes">Behind the scenes</option><option value="Operator floor data">Operator floor data</option></select>
-<select value="{{ k.aimed }}" onChange="{{ k.setAimed }}" disabled="{{ k.ro }}" aria-label="Aimed at" style="height:32px; padding:0 8px; border:0; border-radius:8px; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); color:var(--ink-2); cursor:pointer;"><option value="">Aimed at…</option><option value="Data buyers">Data buyers</option><option value="Robot builders">Robot builders</option><option value="Robot deployers">Robot deployers</option><option value="Everyone in robotics">Everyone in robotics</option></select>
+<div style="display:flex; gap:6px;">
+<select value="{{ k.type }}" onChange="{{ k.setType }}" disabled="{{ k.ro }}" aria-label="Format" style="flex:1; min-width:0; height:30px; padding:0 6px; border:0; border-radius:8px; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); color:var(--ink-2); cursor:pointer;"><option value="">Format…</option><option value="Lead magnet">Lead magnet</option><option value="Founder story">Founder story</option><option value="Data post">Data post</option><option value="Tagging post">Tagging post</option><option value="How it works">How it works</option><option value="Contrarian take">Contrarian take</option><option value="Company news">Company news</option><option value="Behind the scenes">Behind the scenes</option><option value="Operator floor data">Operator floor data</option></select>
+<select value="{{ k.aimed }}" onChange="{{ k.setAimed }}" disabled="{{ k.ro }}" aria-label="Aimed at" style="flex:1; min-width:0; height:30px; padding:0 6px; border:0; border-radius:8px; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); color:var(--ink-2); cursor:pointer;"><option value="">Aimed at…</option><option value="Data buyers">Data buyers</option><option value="Robot builders">Robot builders</option><option value="Robot deployers">Robot deployers</option><option value="Everyone in robotics">Everyone in robotics</option></select>
 </div>
 <div style="display:flex; align-items:center; gap:10px;">
-<span style="width:36px; height:36px; flex:0 0 36px; border-radius:50%; display:grid; place-items:center; font-size:var(--fs-xs); font-weight:600; background:{{ k.avBg }}; color:{{ k.avFg }};">{{ k.ini }}</span>
+<span style="width:30px; height:30px; flex:0 0 30px; border-radius:50%; display:grid; place-items:center; font-size:var(--fs-3xs); font-weight:600; background:{{ k.avBg }}; color:{{ k.avFg }};">{{ k.ini }}</span>
 <span style="display:flex; flex-direction:column; line-height:1.3; min-width:0;"><span style="font-size:var(--fs-sm); font-weight:600;">{{ k.name }}</span><span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ k.handle }}</span></span>
 </div>
 <textarea value="{{ k.text }}" onChange="{{ k.setText }}" onBlur="{{ k.saveText }}" disabled="{{ k.txtRo }}" placeholder="Write the post…" rows="{{ k.rows }}" style="width:100%; box-sizing:border-box; padding:2px 0; border:0; background:transparent; font-size:var(--fs-sm); line-height:1.5; font-family:inherit; color:var(--ink); resize:vertical; outline:none;"></textarea>

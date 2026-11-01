@@ -448,10 +448,23 @@ class Component extends DCLogic {
         return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:list.map(x=>this.calCard(x.p,x.w,a)),
           canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'');},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
           over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d);}};});
-      return{...a,...avatar(avName(a.name)),strip:days.map(d=>({l:d.dow[0],bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols};});
+      const ti=days.findIndex(d=>d.today);
+      return{...a,...avatar(avName(a.name)),strip:days.map((d,i)=>({l:d.dow[0],full:d.dow+' '+d.num+' '+d.mon,go:()=>this.calScroll(a.acc,i),bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols,
+        sid:'cal-'+a.acc,pan:e=>this.calPan(e),left:()=>this.calScroll(a.acc,'l'),right:()=>this.calScroll(a.acc,'r'),today:()=>{if(ti<0)this.setState({week:0});this.calScroll(a.acc,Math.max(0,ti<0?(new Date().getDay()+6)%7:ti));}};});
+    // Open each board on today's column (once per week shown); the page may still be drawing, so try for a moment.
+    const sk=off+'|'+accs.map(a=>a.acc).join();if(this._calSk!==sk){this._calSk=sk;const ti=days.findIndex(d=>d.today);let n=0;
+      const go=()=>{if(accs.every(a=>document.getElementById('cal-'+a.acc))){accs.forEach(a=>this.calScroll(a.acc,ti<0?0:ti,true));}else if(n++<40)setTimeout(go,100);};setTimeout(go,50);}
     return{label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',
       prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',
       kinds,zones,boards,summary:placed.length+(placed.length===1?' post':' posts')+' this week',hasEmpty:empty>0,empty:empty+(empty===1?' empty day':' empty days')+' left',pick:this.calPickVals()};}
+  // Hold and drag the board's empty space to move left and right (cards, fields and buttons keep working as usual).
+  calPan(e){if(e.button!==0||e.target.closest('input,textarea,select,button,label,a,img,[draggable="true"]'))return;
+    const el=e.currentTarget,x0=e.clientX,l0=el.scrollLeft;el.style.cursor='grabbing';e.preventDefault();
+    const move=ev=>{el.scrollLeft=l0-(ev.clientX-x0);};const up=()=>{el.style.cursor='grab';window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',up);};
+    window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);}
+  // Scroll a board: 'l' / 'r' by two days, or to day i (0 = Monday).
+  calScroll(acc,where,instant){const el=document.getElementById('cal-'+acc);if(!el||!el.children.length)return;const w=el.children[0].getBoundingClientRect().width+12;const behavior='auto';
+    if(where==='l'||where==='r')el.scrollBy({left:(where==='l'?-2:2)*w,behavior});else el.scrollTo({left:Math.max(0,where-1)*w,behavior});}
   calCard(p,w,a){const s=this.state;const f=this.founder;const o=p.o;const id=p.id;const ed=s.calEd[id]||{};
     const st=p.link?'Posted':String(o.Status||'Draft');const pc=CAL_PILL[st]||['var(--warn-soft)','var(--warn-ink)'];
     const setEd=(k,v)=>this.setState(x=>({calEd:{...x.calEd,[id]:{...(x.calEd[id]||{}),[k]:v}}}));

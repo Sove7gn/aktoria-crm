@@ -28,6 +28,8 @@ def rep(old, new, count=1):
 rep('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<script src="./support.js"></script>\n</head>',
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
     '<meta name="robots" content="noindex">\n<title>Aktoria CRM</title>\n'
+    '<style>.ak-board::-webkit-scrollbar{height:10px}.ak-board::-webkit-scrollbar-thumb{background:rgba(19,20,24,.22);border-radius:6px}'
+    '.ak-board::-webkit-scrollbar-track{background:rgba(19,20,24,.05);border-radius:6px}.ak-board{scrollbar-color:rgba(19,20,24,.25) rgba(19,20,24,.05)}</style>\n'
     '<script src="./data.js"></script>\n<script>\n' + logic + '\n</script>\n<script src="./support.js"></script>\n'
     '<script>\n'
     '// If this host blocks the runtime\'s compile step (no eval), hand it the logic class directly.\n'
