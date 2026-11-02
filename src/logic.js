@@ -39,6 +39,13 @@ const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'F
 // LinkedIn (2 Nov): the same boards for each account's LinkedIn, from Our Posts rows whose Platform is "LinkedIn".
 const platOf=o=>/linkedin/i.test(String(o.Platform||''))?'LinkedIn':'X';
 const LI_NAME={Karan:'Jaskaran Singh Walia',Shreenabh:'Shreenabh Agrawal',Aktoria:'Aktoria Robotics'};
+// Download the original file (2 Nov ask): Drive files come straight from Drive's download endpoint, the same bytes
+// that were uploaded; files hosted next to this page are saved as they are. Nothing is re-encoded or resized.
+const driveId=u=>(String(u||'').match(/(?:\/d\/|[?&]id=)([\w-]{20,})/)||[])[1]||'';
+const download=(url,name)=>{const id=driveId(url);const a=document.createElement('a');
+  if(id&&/drive\.google|googleusercontent/.test(url)){a.href='https://drive.usercontent.google.com/download?id='+id+'&export=download&confirm=t';}
+  else{a.href=url;a.download=name||String(url).split('/').pop().split('?')[0];}
+  a.rel='noopener';document.body.appendChild(a);a.click();a.remove();};
 const onCal=p=>{const c=String(p.o.Calendar||'').trim().toLowerCase();return c==='yes'||(c!=='no'&&(!!p.link||p.status==='Scheduled'));};
 const CAL_TYPES=['Lead magnet','Founder story','Data post','Tagging post','How it works','Contrarian take','Company news','Behind the scenes','Operator floor data'];
 const CAL_AIMED=['Data buyers','Robot builders','Robot deployers','Everyone in robotics'];
@@ -503,10 +510,10 @@ class Component extends DCLogic {
     const setOpen=v=>this.setState(x=>({calOpen:{...x.calOpen,[id]:v}}));
     const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id).sort((x,y)=>y.when-x.when).slice(0,5)
       .map(x=>({line:clip(firstLine(x.text)||x.link,80),when:x.o._date?AK.dayWord(x.o._date):'',pick:()=>this.calLinkTo(p,x)})):[];
-    const media=AK.mediaIds(o['Media file']).map(m=>({video:!!(p.sug&&p.sug.video&&p.sug.url.indexOf(m)>=0),src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
+    const media=AK.mediaIds(o['Media file']).map(m=>({video:!!(p.sug&&p.sug.video&&p.sug.url.indexOf(m)>=0),src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>download('https://drive.google.com/file/d/'+m+'/view'),
       rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}))
       // Plain image links too (e.g. graphics hosted next to this page): shown as they are, open full size to download.
-      .concat(String(o['Media file']||'').split(/\s+/).filter(u=>/^https?:\/\/\S+\.(png|jpe?g|webp|gif)$/i.test(u)&&!/drive\.google/.test(u)).map(u=>({video:false,src:u,open:()=>window.open(u,'_blank','noopener'),
+      .concat(String(o['Media file']||'').split(/\s+/).filter(u=>/^https?:\/\/\S+\.(png|jpe?g|webp|gif)$/i.test(u)&&!/drive\.google/.test(u)).map(u=>({video:false,src:u,open:()=>download(u),
         rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(x=>x&&x!==u).join('\n');AK.calSave(o,{media:keep});}),canRm:!f})));
     const cb=this.copyBtn('cal'+id,'Copy');const up=AK.S.busy.has('up'+o._key);
     return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,txtRo:f||!!p.link,rows:p.link?'4':'7',notLive:!p.link,canUp:!f&&!p.link,
@@ -528,7 +535,7 @@ class Component extends DCLogic {
       setLinkVal:e=>this.setState({calLinkVal:e.target.value}),saveLink:()=>this.calLinkPaste(p,s.calLinkVal),
       linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0,
       hasSug:!!p.sug&&!p.link&&!media.length,sugThumb:p.sug?p.sug.thumb:'',sugVideo:!!(p.sug&&p.sug.video),
-      useSug:()=>{const cur=String(o['Media file']||'').trim();if(p.sug)AK.calSave(o,{media:(cur?cur+'\n':'')+p.sug.url});},sugName:p.sug?clip(p.sug.name,34):'',sugWhy:p.sug?p.sug.why:'',openSug:()=>p.sug&&window.open(p.sug.url,'_blank','noopener')};}
+      useSug:()=>{const cur=String(o['Media file']||'').trim();if(p.sug)AK.calSave(o,{media:(cur?cur+'\n':'')+p.sug.url});},sugName:p.sug?clip(p.sug.name,34):'',sugWhy:p.sug?p.sug.why:'',openSug:()=>p.sug&&download(p.sug.url,p.sug.name)};}
   // A card made on the calendar that is still empty is removed for good; any other post just leaves the calendar.
   calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';const wasCal=p.o.Calendar||'';
     AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:'No'}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:wasCal}));});}
@@ -569,7 +576,7 @@ class Component extends DCLogic {
     return{...p,...avatar(p.comp),accAv:avatar(avName(p.acc)),accName:p.acc,st:pill(p.status,ST[p.status]),hasQ:!!p.q,hasNums:!!p.ourViews,noNums:!p.ourViews,actions,hasActions:actions.length>0,needsMedia:p.needsMedia,
       linkOpen:s.linkFor===p.id,linkVal:s.linkVal,linkPh:'Paste the link of '+p.acc+'’s post on X (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',onLink:e=>this.setState({linkVal:e.target.value}),saveLink:()=>this.markPosted(p),cancelLink:()=>this.setState({linkFor:null}),
       compare:()=>this.setState({cmpId:p.id,cmpOn:true}),copyQ:()=>this.copy('Question for Aktoria: '+p.q,qk,'Question copied for WhatsApp'),qLabel:qb.label,qbg:qb.bg,qfg:qb.fg,qsh:qb.sh,openDrive:e=>{e.preventDefault();if(p.folder)open(AK.folderUrl(p.folder.id));else this.toast('No Drive folder is set for this post in the sheet.',null,true);},
-      hasSug:!!p.sug&&p.status!=='Posted',sugThumb:p.sug?p.sug.thumb.replace('sz=w600','sz=w120'):'',sugName:p.sug?clip(p.sug.name,40):'',sugWhy:p.sug?p.sug.why:'',openSug:e=>{e.preventDefault();if(p.sug)open(p.sug.url);},tip:this.tipFor('rank'+p.id)};}
+      hasSug:!!p.sug&&p.status!=='Posted',sugThumb:p.sug?p.sug.thumb.replace('sz=w600','sz=w120'):'',sugName:p.sug?clip(p.sug.name,40):'',sugWhy:p.sug?p.sug.why:'',openSug:e=>{e.preventDefault();if(p.sug)download(p.sug.url,p.sug.name);},tip:this.tipFor('rank'+p.id)};}
   async markScheduled(p){if(this.founder)return;const prev=p.o.Status||'';
     const ok=await AK.saveScheduled(p.o,true,{quiet:true});
     if(ok)this.toast('Marked as scheduled',AK.canRestore()?()=>this.restorePost(p,prev):null);}

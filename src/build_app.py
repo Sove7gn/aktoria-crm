@@ -120,7 +120,7 @@ src = src[:c0] + open(os.path.join(HERE, "calendar.html"), encoding="utf-8").rea
 
 # ---------- our posts: the suggested photo or clip from Drive, next to "Drive folder" ----------
 rep('<sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}"',
-    '<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);"><img src="{{ p.sugThumb }}" alt="" style="width:20px; height:20px; margin:0 7px 0 -6px; border-radius:50%; object-fit:cover; background:#fff;">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↗</a></sc-if>\n'
+    '<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);"><img src="{{ p.sugThumb }}" alt="" style="width:20px; height:20px; margin:0 7px 0 -6px; border-radius:50%; object-fit:cover; background:#fff;">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↓</a></sc-if>\n'
     '<sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}"')
 
 # ---------- post tracker: the target is 3 posts a day per account (founder call), not the design's 5 ----------
