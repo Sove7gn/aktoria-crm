@@ -19,7 +19,7 @@ const RANGES={
   comps:"'Competitors'!A3:O60",
   people:"'Competitor People'!A3:H200",
   theirs:"'Their Posts'!A3:AB1000",
-  ours:"'Our Posts'!A3:AA1500",
+  ours:"'Our Posts'!A3:AB1500",
   draftsK:"'Karan Posts'!A3:U200",
   draftsS:"'Shreenabh Posts'!A3:U200",
   draftsA:"'Aktoria Posts'!A3:U200",
@@ -216,7 +216,7 @@ function build(){
     return r}).filter(r=>r.Status!=="Deleted"):[];
   // Cards made on the calendar that the sheet hasn't shown yet.
   S.calTemp=S.calTemp.filter(t=>!(t.row&&M.ours.some(r=>r._row===t.row)));
-  for(const t of S.calTemp){const r={_row:t.key,_key:"o"+t.key,_temp:true,Date:t.date,"Time (IST)":t.time,Account:t.account,Platform:t.platform||"X",Competitor:"Our own",
+  for(const t of S.calTemp){const r={_row:t.key,_key:"o"+t.key,_temp:true,Date:t.date,"Time (IST)":t.time,Account:t.account,Platform:t.platform||"X","Daily slot":t.slot||"",Competitor:"Our own",
     "What we changed":"Added in the calendar",Status:"Draft",Calendar:"Yes","Our version":""};calOverlay(r,t.key);r._date=parseDate(r.Date);if(r.Status!=="Deleted")M.ours.push(r)}
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
   // LinkedIn snapshots (2 Nov) stay out of the X numbers (views, followers, the weekly grid): kept on their own.
@@ -632,7 +632,7 @@ async function addPost(f){
    A post is on the calendar only when its Our Posts column Z (Calendar) says "Yes": nothing lands there on its own.
    Every card edit saves straight to its row; edits wait in a queue so a new card gets its row before anything else is written. */
 const CAL_COLS={date:["Date","B"],time:["Time (IST)","C"],type:["Post type","F"],text:["Our version","J"],media:["Media file","N"],
-  status:["Status","O"],link:["Posted link","Q"],aimed:["Aimed at","Y"],cal:["Calendar","Z"]};
+  status:["Status","O"],link:["Posted link","Q"],aimed:["Aimed at","Y"],cal:["Calendar","Z"],slot:["Daily slot","AB"]};
 // Saved card fields show at once and stay until the sheet reads them back (or 10 minutes pass).
 function calOverlay(r,key){
   const loc=S.calLocal[key];if(!loc)return;
@@ -644,9 +644,9 @@ const rawText=row=>{const g=S.raw.ours||[];const r=g[row-3];return r?snip(r[9]):
 let calQ=Promise.resolve();
 function queue(fn){const run=calQ.then(fn);calQ=run.then(()=>{},()=>{});return run}
 // A new card for an account on a day ("D Mon YYYY"); time is IST ("7:30 PM") or blank. Returns the card's id.
-function calNew(account,date,time,platform){
+function calNew(account,date,time,platform,slot){
   const key="n"+Date.now().toString(36);platform=platform==="LinkedIn"?"LinkedIn":"X";
-  const t={key,account,date,time:time||"",row:null,platform};
+  const t={key,account,date,time:time||"",row:null,platform,slot:slot||""};
   S.calTemp.push(t);build();emit();
   t.ready=queue(async()=>{
     let row;
@@ -654,7 +654,7 @@ function calNew(account,date,time,platform){
       row=3+(S.raw.ours||[]).length;
       await putCells("'Our Posts'!A"+row+":Z"+row,[[weekOf(date),date,time||"",account,platform,"","Our own","","","","Added in the calendar","","","","Draft",
         "","","","","","","","","","","Yes"]]);
-    }else row=Number(String(await scriptCall({action:"calSave",account,date,time:time||"",cal:"Yes",status:"Draft",platform})).split(" ")[1]);
+    }else row=Number(String(await scriptCall({action:"calSave",account,date,time:time||"",cal:"Yes",status:"Draft",platform,slot:slot||""})).split(" ")[1]);
     if(!row)throw new Error("the sheet didn't say which row it used");
     t.row=row;S.calAlias[row]=key;S.calText[row]="";
     if(S.calLocal[key])S.calLocal[row]=S.calLocal[key];

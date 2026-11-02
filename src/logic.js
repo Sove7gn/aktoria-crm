@@ -25,8 +25,13 @@ const OWNERS=['Everyone','Karan','Shreenabh','Aktoria page'];
 const TIPS=['fq','pilot','cant','fund','fit','likely','verdict','target','eng1k','week','dms','rank','groups','skip'];
 const CST={Posted:{dot:'var(--ok)',bg:'var(--ok-soft)',fg:'var(--ok-ink)'},Scheduled:{dot:'var(--ink-3)',bg:'var(--n-soft)',fg:'var(--ink-2)'},'To post':{dot:'var(--warn)',bg:'var(--warn-soft)',fg:'var(--warn-ink)'}};
 // Founder call, 29 Oct 2026: DMs wait until the accounts have presence and the Forbes piece is out.
-// Post type filter on Our posts. The pilot's four priority formats first; everything else is "Other".
-const POST_KINDS=['Lead magnet','Founder story','Data post','Tagging post','Other'];
+// Daily slots (team ask, 2 Nov): every X account posts 3 a day, one per slot. Our Posts AB "Daily slot" says which;
+// rows from before then fall back to their post type. The calendar, the Drafts picker and Our posts filter on these.
+const SLOTS3=['Account tag','Founder','Data & product'];
+const SLOT_HINT={'Account tag':'Tag ICP people or companies: a map, shoutout or insight','Founder':'The founders\u2019 life, a story or milestone, with their photo','Data & product':'Data, tech or startup post with an Aktoria clip or image'};
+const slotOf=o=>{const v=String(o['Daily slot']||'').trim();if(SLOTS3.includes(v))return v;const t=String(o['Post type']||'');
+  return /tag/i.test(t)?'Account tag':/founder|behind the scenes/i.test(t)?'Founder':/data|lead magnet|how it works|operator floor|company news/i.test(t)?'Data & product':'';};
+const POST_KINDS=[...SLOTS3,'Other'];
 const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'Founder story':/data/i.test(t)?'Data post':/tag/i.test(t)?'Tagging post':'Other';
 // Calendar (31 Oct): one board per account, a column per day. Posts the team puts there (Our Posts column Z "Calendar" =
 // Yes) plus everything posted or scheduled; drafts never land there on their own. The sheet keeps times in IST; the board shows them in IST or Pacific time.
@@ -39,7 +44,7 @@ const CAL_TYPES=['Lead magnet','Founder story','Data post','Tagging post','How i
 const CAL_AIMED=['Data buyers','Robot builders','Robot deployers','Everyone in robotics'];
 const CAL_ST=['Draft','Ready to post','Scheduled','Posted'];
 const CAL_PILL={Draft:['var(--n-soft)','var(--ink-2)'],Scheduled:['var(--in-soft)','var(--in-ink)'],Posted:['var(--ok-soft)','var(--ok-ink)']};
-const KIND_DOT={'Lead magnet':'var(--warn)','Founder story':'oklch(0.68 0.16 45)','Data post':'var(--out)','Tagging post':'var(--mid)',Other:'var(--ink-4)'};
+const KIND_DOT={'Account tag':'var(--mid)','Founder':'oklch(0.68 0.16 45)','Data & product':'var(--out)',Other:'var(--ink-4)'};
 const ZONES={ist:{tz:'Asia/Kolkata',label:'IST'},pst:{tz:'America/Los_Angeles',label:'PST'}};
 const zparts=(ms,tz)=>{const o={};new Intl.DateTimeFormat('en-US',{timeZone:tz,year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',hourCycle:'h23'}).formatToParts(new Date(ms)).forEach(x=>{o[x.type]=+x.value||0;});return{y:o.year,m:o.month-1,d:o.day,H:o.hour%24,M:o.minute};};
 const wallToMs=(y,m,d,H,M,tz)=>{let g=Date.UTC(y,m,d,H,M);for(let i=0;i<2;i++){const p=zparts(g,tz);g+=Date.UTC(y,m,d,H,M)-Date.UTC(p.y,p.m,p.d,p.H,p.M);}return g;};
@@ -229,7 +234,7 @@ class Component extends DCLogic {
     const ptype=String(o['Post type']||'').trim();
     // Suggested media (Our Posts AA, filled by the aktoria-media-picks task): "File name | Drive link | why it fits".
     const sg=String(o['Suggested media']||'').split('|').map(x=>x.trim());const sugUrl=AK.safeUrl(sg[1]||'');
-    return {id:o._key,o,status,ptype,kind:kindOf(ptype),comp,compH:t?(t.Account||'')+(t.Platform?' · '+t.Platform:''):(o.Platform||'X'),
+    return {id:o._key,o,status,ptype,kind:slotOf(o)||'Other',slot:slotOf(o),comp,compH:t?(t.Account||'')+(t.Platform?' · '+t.Platform:''):(o.Platform||'X'),
       rankLabel:(ptype?ptype+' · ':'')+(t&&t._vrank?'#'+t._vrank+' of '+t._vrankN+' for '+comp:'Original not saved yet'),rankOf:comp,
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
@@ -452,7 +457,7 @@ class Component extends DCLogic {
     const placed=this.postList().filter(p=>onCal(p)&&platOf(p.o)===plat).map(p=>({p,w:calWhere(p.o,zone)})).filter(x=>x.w&&keys.has(x.w.key)&&accs.some(a=>a.acc===x.p.account));
     const kind=s.calKind;const shown=kind==='All'?placed:placed.filter(x=>x.p.kind===kind);
     const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;const n=k==='All'?placed.length:placed.filter(x=>x.p.kind===k).length;
-      return{label:k,count:String(n),go:()=>this.setState({calKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink)',bd:on?'var(--ink)':'var(--hairline-strong)',dot:KIND_DOT[k]||'transparent',hasDot:k!=='All'};});
+      return{label:k,count:String(n)+(!isLi&&SLOTS3.includes(k)?'/'+(accs.length*7):''),go:()=>this.setState({calKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink)',bd:on?'var(--ink)':'var(--hairline-strong)',dot:KIND_DOT[k]||'transparent',hasDot:k!=='All'};});
     const plats=['X','LinkedIn'].map(x=>{const on=plat===x;return{label:x==='X'?'𝕏  X':'in  LinkedIn',go:()=>{store.set('calPlat',x);this.setState({calPlat:x,calPick:null});},bg:on?'var(--ink)':'transparent',fg:on?'#fff':'var(--ink-2)',sh:on?'var(--shadow-sm)':'none'};});
     const zones=['ist','pst'].map(z=>{const on=zone===z;return{label:ZONES[z].label,go:()=>{store.set('calZone',z);this.setState({calZone:z});},bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-3)',sh:on?'var(--shadow-sm)':'none'};});
     const has=(acc,key)=>placed.some(x=>x.p.account===acc&&x.w.key===key);
@@ -462,7 +467,14 @@ class Component extends DCLogic {
       const last=this.postList().filter(p=>p.account===a.acc&&p.link&&platOf(p.o)===plat&&p.when<=Date.now()).sort((x,y)=>y.when-x.when)[0];
       const line=[gaps.length===7?'Nothing planned this week':gaps.length?'Nothing planned '+gaps.join(', '):'',last?'last post '+dLabel(last.when)+(last.ourViews?': '+last.ourViews+' views':''):''].filter(Boolean).join(' · ');
       const cols=days.map(d=>{const list=shown.filter(x=>x.p.account===a.acc&&x.w.key===d.key).sort((x,y)=>x.w.sort-y.w.sort);
-        return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:list.map(x=>this.calCard(x.p,x.w,a)),
+        const card=x=>({isCard:true,isSlot:false,...this.calCard(x.p,x.w,a)});let items;
+        if(isLi)items=list.map(card);
+        else{items=[];for(const sl of SLOTS3){if(kind!=='All'&&kind!==sl)continue;const mine=list.filter(x=>x.p.slot===sl);
+            if(mine.length)items.push(...mine.map(card));
+            else if(d.rel>=0&&!f)items.push({isCard:false,isSlot:true,slotLabel:sl,slotHint:SLOT_HINT[sl],slotDot:KIND_DOT[sl],
+              slotNew:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'',plat,sl);},slotPick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:sl})});}
+          items.push(...list.filter(x=>!SLOTS3.includes(x.p.slot)).map(card));}
+        return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:items,
           canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'',plat);},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
           over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d);}};});
       const ti=days.findIndex(d=>d.today);
@@ -497,7 +509,7 @@ class Component extends DCLogic {
     return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,txtRo:f||!!p.link,rows:p.link?'4':'7',notLive:!p.link,canUp:!f&&!p.link,
       time:ed.time!=null?ed.time:w.hm,zone:ZONES[s.calZone].label,setTime:e=>setEd('time',e.target.value),
       saveTime:()=>{const v=takeEd('time');if(v!=null&&v!==w.hm){const r=toIst(w.key,v,s.calZone);AK.calSave(o,{date:r.date,time:r.time});}},
-      type:CAL_TYPES.includes(p.ptype)?p.ptype:'',setType:e=>AK.calSave(o,{type:e.target.value}),
+      type:CAL_TYPES.includes(p.ptype)?p.ptype:'',setType:e=>AK.calSave(o,{type:e.target.value}),slot:p.slot,setSlot:e=>AK.calSave(o,{slot:e.target.value}),
       aimed:CAL_AIMED.includes(o['Aimed at'])?o['Aimed at']:'',setAimed:e=>AK.calSave(o,{aimed:e.target.value}),
       name:li?LI_NAME[a.acc]||a.name:a.name,handle:li?'LinkedIn':a.handle,...avatar(avName(a.name)),
       collapsed:!open,expanded:open,short:clip(txt.replace(/\s+/g,' '),100),more:()=>setOpen(true),canLess:long&&open,less:()=>setOpen(false),
@@ -539,7 +551,7 @@ class Component extends DCLogic {
     const r=toIst(pk.key,'',s.calZone);const [y,m,d]=pk.key.split('-').map(Number);const dt=new Date(y,m,d);
     const items=C.slice(0,30).map(p=>({id:p.id,type:p.ptype||'Post',line:clip(firstLine(p.text)||p.text,150),when:p.o._date?'Drafted '+AK.dayWord(p.o._date).replace(/^(Today|Yesterday|Tomorrow)/,w=>w.toLowerCase()):'Parked for later',needs:p.q?'Needs a founder answer':'',hasNeeds:!!p.q,
       add:()=>AK.calSave(p.o,{cal:'Yes',date:r.date,time:''}).then(ok=>{if(ok){this.setState({calPick:null});this.toast('Added to the calendar');}})}));
-    return{open:true,title:'Add a draft to '+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]+' '+d+' '+AK.MON[m],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
+    return{open:true,title:(kind!=='All'?kind+' draft for ':'Add a draft to ')+ownerName(acc)+' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]+' '+d+' '+AK.MON[m],kinds,items,empty:items.length===0,close:()=>this.setState({calPick:null})};}
 
   /* ---------- our posts ---------- */
   postCard(p){const s=this.state;const ST={'To post':'warn','Scheduled':'neutral','Posted':'ok','Later':'ghost'};const k=p.id+'c';const cb=this.copyBtn(k,'Copy our version');let actions=[];
