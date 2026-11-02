@@ -77,7 +77,10 @@ rep('<span style="font-size:var(--fs-xs); color:var(--ink-3);">4 this week. Goal
 # ---------- our posts: post type filter under the status tabs ----------
 rep('</sc-for>\n</div>\n</div>\n\n<div style="display:flex; flex-direction:column; gap:var(--s-5);">\n<sc-for list="{{ posts.list }}" as="p">',
     '</sc-for>\n</div>\n</div>\n'
-    '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">\n<sc-for list="{{ posts.types }}" as="c">'
+    '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">\n'
+    '<sc-for list="{{ posts.plats }}" as="pl"><button onClick="{{ pl.go }}" style="display:inline-flex; align-items:center; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ pl.bd }}; background:{{ pl.bg }}; color:{{ pl.fg }}; font-size:var(--fs-sm); font-weight:600; cursor:pointer; white-space:nowrap;">{{ pl.label }}</button></sc-for>'
+    '<span style="width:1px; height:22px; margin:4px 4px; background:var(--hairline-strong);"></span>'
+    '<sc-for list="{{ posts.types }}" as="c">'
     '<button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}'
     '<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button>'
     '</sc-for>\n'
@@ -117,8 +120,14 @@ src = src[:c0] + open(os.path.join(HERE, "calendar.html"), encoding="utf-8").rea
 
 # ---------- our posts: the suggested photo or clip from Drive, next to "Drive folder" ----------
 rep('<sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}"',
-    '<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↗</a></sc-if>\n'
+    '<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);"><img src="{{ p.sugThumb }}" alt="" style="width:20px; height:20px; margin:0 7px 0 -6px; border-radius:50%; object-fit:cover; background:#fff;">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↗</a></sc-if>\n'
     '<sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}"')
+
+# ---------- post tracker: the target is 3 posts a day per account (founder call), not the design's 5 ----------
+rep('Green: 5 posts and engagement went up.', 'Green: 3 posts and engagement went up.')
+
+# ---------- people to DM: only Aktoria's ICP now (verdict "DM + reply"), so the sort note says so ----------
+rep('color:var(--ink-3);">Robotics people first', 'color:var(--ink-3);">Only people who fit Aktoria’s ICP')
 
 # ---------- people to DM: x clears a person off the list (Status "Dismissed") ----------
 rep('">Mark messaged</button></sc-if>',

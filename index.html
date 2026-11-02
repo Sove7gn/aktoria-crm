@@ -41,6 +41,9 @@ const kindOf=t=>/lead magnet/i.test(t)?'Lead magnet':/founder story/i.test(t)?'F
 // Calendar (31 Oct): one board per account, a column per day. Posts the team puts there (Our Posts column Z "Calendar" =
 // Yes) plus everything posted or scheduled; drafts never land there on their own. The sheet keeps times in IST; the board shows them in IST or Pacific time.
 // Posted and scheduled posts show on their own (31 Oct ask); Calendar "No" = someone took it off with the bin.
+// LinkedIn (2 Nov): the same boards for each account's LinkedIn, from Our Posts rows whose Platform is "LinkedIn".
+const platOf=o=>/linkedin/i.test(String(o.Platform||''))?'LinkedIn':'X';
+const LI_NAME={Karan:'Jaskaran Singh Walia',Shreenabh:'Shreenabh Agrawal',Aktoria:'Aktoria Robotics'};
 const onCal=p=>{const c=String(p.o.Calendar||'').trim().toLowerCase();return c==='yes'||(c!=='no'&&(!!p.link||p.status==='Scheduled'));};
 const CAL_TYPES=['Lead magnet','Founder story','Data post','Tagging post','How it works','Contrarian take','Company news','Behind the scenes','Operator floor data'];
 const CAL_AIMED=['Data buyers','Robot builders','Robot deployers','Everyone in robotics'];
@@ -62,6 +65,12 @@ const calWhere=(o,zone)=>{const d=o._date;if(!d)return null;const t=o['Time (IST
 const toIst=(key,hm,zone)=>{const [y,m,d]=key.split('-').map(Number);if(!hm)return{date:d+' '+AK.MON[m]+' '+y,time:''};
   const [H,M]=hm.split(':').map(Number);const p=zparts(wallToMs(y,m,d,H,M,ZONES[zone].tz),'Asia/Kolkata');return{date:p.d+' '+AK.MON[p.m]+' '+p.y,time:t12(p.H,p.M)};};
 const dfmt=d=>d.getDate()+' '+AK.MON[d.getMonth()]+' '+d.getFullYear();
+// Midbound (2 Nov): every replier gets a verdict from the aktoria-engager-replies task (Post Engagers S, why in T).
+// "DM + reply" = Aktoria's ICP (runs or trains robots and can buy); "Reply only" = robotics people worth a public answer;
+// "Skip" = everyone else. Rows from before verdicts existed fall back to the old Fit column.
+const verdictOf=e=>{const v=String(e.Verdict||'').trim();if(v)return v;return /Core buyer|Robotics leader/.test(e.Fit||'')?'DM + reply':/Robotics/.test(e.Fit||'')?'Reply only':'Skip';};
+const VERD_T={'DM + reply':'solid','Reply only':'mid',Skip:'ghost'};
+const openStatus=e=>!/^(Messaged|Dismissed|Do not contact)$/.test(e.Status||'');
 const DM_HOLD={on:'DMs are paused, so nothing shows as ready to send or follow-up due. Replies still show in Inbox.',off:'DMs are on. Press Pause DMs to hide everything unsent until you start again.'};
 
 /* sheet <-> design */
@@ -107,7 +116,7 @@ class Component extends DCLogic {
     return {page,owner:'Everyone',cid:null,lastCid:null,toastMsg:'',toastUndo:null,toastErr:false,toastOn:false,narrow:false,done:{},more:{},leaving:{},copied:null,tip:null,loading:true,entered:false,pal:false,palQ:'',notes:{},callAt:{},
     pend:{},anyway:store.get('anyway',{}),v:0,
     pipeTab:'Board',sortKey:'pri',sortDir:1,fFund:'All',fStage:'Any stage',fCh:'Any channel',allCols:false,dragId:null,dragOver:null,
-    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',calZone:store.get('calZone','ist')==='pst'?'pst':'ist',calKind:'All',calEd:{},calLink:null,calLinkVal:'',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
+    week:0,calDay:dow,postsTab:'To post',postType:'All',addOpen:false,addF:null,calPick:null,calPickKind:'All',calZone:store.get('calZone','ist')==='pst'?'pst':'ist',calPlat:store.get('calPlat','X')==='LinkedIn'?'LinkedIn':'X',postPlat:'All',calOpen:{},calKind:'All',calEd:{},calLink:null,calLinkVal:'',linkFor:null,linkVal:'',cmpId:null,cmpOn:false,pdmTab:'To message',compTab:'Competitors',compId:null,compFilter:'All',trkMore:false};})();
   rootRef=React.createRef(); mainRef=React.createRef(); palRef=React.createRef();
   componentDidMount(){
     const el=this.rootRef.current;
@@ -210,7 +219,7 @@ class Component extends DCLogic {
     if(f==='Desktop 1280')return{w:'1280px',h:'820px',r:'16px',s:'0 0 0 1px rgba(19,20,24,.08), 0 40px 100px -40px rgba(0,0,0,.35)',m:'32px',phone:false,tabPad:'8px'};
     return{w:'100%',h:'100vh',r:'0px',s:'none',m:'0px',phone:false,tabPad:'8px'};}
   engagers(){return AK.M.engagers.filter(e=>this.own(e.Account));}
-  counts(P){const L=this.lists(P);return{send:L.ts.length+L.fu.length,inbox:L.rep.length+L.calls.length+this.postReplies().length,pdm:this.engagers().filter(e=>e.Status!=='Messaged'&&e.Status!=='Dismissed').length};}
+  counts(P){const L=this.lists(P);return{send:L.ts.length+L.fu.length,inbox:L.rep.length+L.calls.length+this.postReplies().length,pdm:this.pdmCards().filter(p=>p.status==='To message').length};}
   navVals(c){const s=this.state;const badges={send:c.send,inbox:c.inbox,pdm:c.pdm};
     return SECS.map(sec=>({label:sec.label,hint:sec.hint||'',hasHead:sec.id!=='home',accent:ACC[sec.id].c,pages:sec.pages.map(id=>{const on=s.page===id;const b=badges[id]||0;return{label:PAGES[id].label,go:()=>this.go(id),bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-2)',fw:on?'600':'450',sh:on?'var(--shadow-sm), var(--hi)':'none',dot:on?ACC[sec.id].c:'transparent',dotS:on?'scale(1)':'scale(.4)',hasBadge:b>0,badge:String(b),badgeBg:on?ACC[sec.id].c:ACC[sec.id].soft,badgeFg:on?'#fff':ACC[sec.id].ink};})}));}
   ownerVals(){return OWNERS.map(o=>{const on=this.state.owner===o;const a=o==='Everyone'?{avBg:'var(--n-soft-2)',avFg:'var(--ink-2)',ini:'∗'}:avatar(avName(o));return{label:o,...a,pick:()=>this.setOwner(o),bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-3)',sh:on?'var(--shadow-sm), var(--hi)':'none'};});}
@@ -235,12 +244,14 @@ class Component extends DCLogic {
       cText:(t&&t['Full text'])||o['Their post']||'',cNums,acc:ownerName(o.Account),account:o.Account,time,
       text:o['Our version']||'',changed:String(o['What we changed']||'').split('\n').map(x=>x.trim()).filter(Boolean).join('; ')||'Nothing noted.',
       tipText:'Where this post ranks among the '+comp+' posts we saved, by views. #1 is their biggest one.'+(o['What we changed']&&o.Competitor!=='Our own'?' What we changed: '+String(o['What we changed']).split('\n').map(x=>x.trim()).filter(Boolean).join('; '):''),
-      media:media||'No media needed',needsMedia,folder,sug:sugUrl?{name:sg[0]||'Open file',url:sugUrl,why:sg[2]||''}:null,q:o['Founder question']||'',link:o['Posted link']||'',
+      media:media||'No media needed',needsMedia,folder,sug:sugUrl?{name:sg[0]||'Open file',url:sugUrl,why:sg[2]||'',video:/\.(mp4|mov|webm|m4v)$/i.test(sg[0]||''),
+        thumb:'https://drive.google.com/thumbnail?id='+((sugUrl.match(/\/d\/([\w-]{20,})/)||[])[1]||'')+'&sz=w600'}:null,q:o['Founder question']||'',link:o['Posted link']||'',
       ourViews:ov!=null?fmtK(ov):'',ourLikes:ol!=null?fmtK(ol):'0',when:(o._date?o._date.getTime():9e15)+AK.minutesOf(o['Time (IST)'])*6e4};
   }
   postList(){const v=AK.version();if(this._opv!==v){this._opv=v;this._posts=AK.M.ours.map(o=>this.postObj(o));}return this._posts;}
   ownPosts(){const ORD={'To post':0,'Scheduled':1,'Posted':2,'Later':3};
-    return this.postList().filter(p=>this.own(p.account)).sort((a,b)=>(ORD[a.status]-ORD[b.status])||(a.status==='Posted'?b.when-a.when:a.when-b.when));}
+    const pl=this.state.postPlat;
+    return this.postList().filter(p=>this.own(p.account)&&(pl==='All'||platOf(p.o)===pl)).sort((a,b)=>(ORD[a.status]-ORD[b.status])||(a.status==='Posted'?b.when-a.when:a.when-b.when));}
   openPost(id){const p=this.postList().find(x=>x.id===id);if(!p)return;this.go('posts',{postsTab:p.status,cmpId:id,cmpOn:true});}
 
   /* ---------- header ---------- */
@@ -257,7 +268,7 @@ class Component extends DCLogic {
     else if(page==='send'){h.title='Send today';h.next=fu.length?fu.length+' follow-ups are due. Send those first, then '+ts.length+' first messages.':ts.length+' first messages are ready, best fit first.';h.cta=fu.length?'Start with '+fu[0].first:'';h.go=fu[0]?()=>this.openC(fu[0].id):null;}
     if(page==='pipeline'){const sent=P.filter(p=>['Sent','Follow-up 1 sent','Follow-up 2 sent'].includes(p.stage)).length;
       h.next=rep.length?rep.length+' people replied and are waiting on us. Calls come next: '+calls.length+' booked.':P.length+' people in the pipeline. '+sent+' have a message out and nobody is waiting on a reply from us.';h.cta=rep.length?'Open replies':'';h.go=rep.length?()=>this.go('inbox'):null;}
-    if(page==='inbox'){h.title='Replies and calls';h.next=rep[0]?'Reply to '+rep[0].first+' at '+rep[0].company+'. Then prep for '+(calls[0]?calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:''):'your next call')+'.':calls[0]?'Nobody is waiting on a reply. Prep for '+calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:'')+'.':(()=>{const R=this.postReplies();const b=R.filter(e=>/Core buyer|Robotics/.test(e.Fit||''));return R.length?R.length+(R.length===1?' person':' people')+' replied to our posts'+(b.length?', '+b.length+' in robotics. Start with '+String(b[0].Name||b[0].Handle).split(' ')[0]+'.':'. Reply under their comments.'):'Nobody is waiting on a reply.';})();h.cta=rep[0]?'Reply to '+rep[0].first:calls[0]?'Prep the call':'';h.go=rep[0]?()=>this.openC(rep[0].id):calls[0]?()=>this.openC(calls[0].id):null;}
+    if(page==='inbox'){h.title='Replies and calls';h.next=rep[0]?'Reply to '+rep[0].first+' at '+rep[0].company+'. Then prep for '+(calls[0]?calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:''):'your next call')+'.':calls[0]?'Nobody is waiting on a reply. Prep for '+calls[0].first+'’s call'+(calls[0].call?' on '+calls[0].call:'')+'.':(()=>{const R=this.postReplies();const b=R.filter(e=>verdictOf(e)==='DM + reply');return R.length?R.length+(R.length===1?' reply is':' replies are')+' worth answering'+(b.length?', '+b.length+' from people who fit Aktoria’s ICP. Start with '+String(b[0].Name||b[0].Handle).split(' ')[0]+'.':'. Reply under their comments.'):'Nobody is waiting on a reply.';})();h.cta=rep[0]?'Reply to '+rep[0].first:calls[0]?'Prep the call':'';h.go=rep[0]?()=>this.openC(rep[0].id):calls[0]?()=>this.openC(calls[0].id):null;}
     if(page==='calendar'){const today=new Date();const n=this.postList().filter(p=>onCal(p)&&p.o._date&&AK.sameDay(p.o._date,today)).length;
       h.next=n?n+' post'+(n===1?' is':'s are')+' on the calendar for today.':'Nothing is on the calendar for today yet.';h.cta='';h.go=null;}
     if(page==='posts'){const tp=this.ownPosts().filter(p=>p.status==='To post');const n=tp[0];
@@ -266,9 +277,9 @@ class Component extends DCLogic {
     if(page==='tracker'){const W=AK.weekGrid(this.accs().map(a=>a.acc));const miss=[];
       const and=a=>a.length>1?a.slice(0,-1).join(', ')+' and '+a[a.length-1]:a[0];
       for(const r of W){const d=r.cells.filter(c=>c.k!=='future'&&!c.today&&c.n===0).map(c=>AK.DOW[c.day.getDay()]);if(d.length)miss.push(ownerName(r.account)+' posted nothing on '+and(d));}
-      h.next=miss.length?miss.join('. ')+'. Each account aims for 5 a day.':'Every account has posted every day this week so far.';h.cta='Open Calendar';h.go=()=>this.go('calendar');}
+      h.next=miss.length?miss.join('. ')+'. Each account posts 3 a day.':'Every account has posted every day this week so far.';h.cta='Open Calendar';h.go=()=>this.go('calendar');}
     if(page==='pdm'){const L2=this.pdmCards().filter(p=>p.status==='To message');
-      h.next=L2.length?L2.length+' people replied to or quoted our posts and haven’t had a message yet. Start with '+L2.slice(0,2).map(p=>p.name).join(' and ')+'.':'Everyone who replied to our posts has a message.';h.cta=L2.length?'Show who to message':'';h.go=L2.length?()=>this.setState({pdmTab:'To message'}):null;}
+      h.next=L2.length?(L2.length===1?'1 person who fits Aktoria’s ICP is':L2.length+' people who fit Aktoria’s ICP are')+' waiting for a DM. Start with '+L2[0].name+': '+String(L2[0].bio).replace(/\.$/,'')+'.':'No ICP repliers waiting for a DM. Everyone else gets a public reply or nothing.';h.cta=L2.length?'Show who to message':'';h.go=L2.length?()=>this.setState({pdmTab:'To message'}):null;}
     if(page==='comps'){const top=this.compList().filter(c=>c.freshUncopied>0).sort((a,b)=>b.freshUncopied-a.freshUncopied)[0];
       h.next=top?top.name+' posted '+top.freshUncopied+' post'+(top.freshUncopied===1?'':'s')+' in the last 7 days that we haven’t copied yet.':'No competitor has posted anything new and uncopied in the last 7 days.';h.cta=top?'Open '+top.name:'';h.go=top?()=>this.openComp(top.id):null;}
     if(g&&!g.wait){h.next='Nothing to show until the Google Sheet loads.';h.cta='';h.go=null;}
@@ -372,20 +383,22 @@ class Component extends DCLogic {
     return{groups,noDM:false,hasGroups:groups.length>0,allClear:groups.length===0,acc,hasRes:!!res&&(res.sent!=='0'||res.hasCant),res:res||{},hold:AK.dmsPaused()?DM_HOLD.on:DM_HOLD.off,clearTitle:AK.dmsPaused()?'DMs are paused':'Everything for today is sent',clearText:AK.dmsPaused()?'Nothing to send while DMs are paused. Press Resume DMs above to bring the list back.':'New people show up here as soon as the sheet marks them ready to send.',pauseLabel:AK.S.busy.has('pause')?'Saving…':AK.dmsPaused()?'Resume DMs':'Pause DMs',togglePause:()=>{if(AK.canEdit())AK.savePaused(!AK.dmsPaused());},holdDot:AK.dmsPaused()?'var(--warn, #b7791f)':'var(--ok)',skipOpen:so,skipN:String(L.skip.length),skipLabel:'Skipped for now: '+L.skip.length+(early===L.skip.length?' seed-stage people':' seed-stage or unclear-funding people'),hasSkip:L.skip.length>0,skipRot:so?'rotate(90deg)':'none',skipCta:so?'Hide':'Show',toggleSkip:()=>this.setState(st=>({more:{...st.more,skip:!st.more.skip}})),skipRows:L.skip.slice(0,s.more.skipAll?999:20).map((p,i)=>this.row(p,i,'skip')),showEveryone:()=>this.setOwner('Everyone')};}
   /* People who replied to or quoted our posts in the last 14 days and haven't been answered: buyers first. */
   postReplies(){const wk=Date.now()-14*864e5;const ORD={'Core buyer':0,'Robotics leader':1,'Robotics':2,'Investor':3,'Other':4};
-    return this.engagers().filter(e=>e.Status==='To message'&&e.Fit!=='Not a buyer'&&(()=>{const d=AK.parseDate(e['Found on']);return !d||d.getTime()>=wk;})())
-      .sort((a,b)=>((ORD[a.Fit]??4)-(ORD[b.Fit]??4))||((num(b.Followers)||0)-(num(a.Followers)||0)));}
+    const VO={'DM + reply':0,'Reply only':1};
+    return this.engagers().filter(e=>(e.Status||'To message')==='To message'&&verdictOf(e)!=='Skip'&&(verdictOf(e)==='DM + reply'||(()=>{const d=AK.parseDate(e['Found on']);return !d||d.getTime()>=wk;})()))
+      .sort((a,b)=>((VO[verdictOf(a)]??2)-(VO[verdictOf(b)]??2))||((ORD[a.Fit]??4)-(ORD[b.Fit]??4))||((num(b.Followers)||0)-(num(a.Followers)||0)));}
   engagerRow(e,i){const s=this.state;const name=e.Name||e.Handle;const a=avatar(name);const key=e._key+'rp';const cb=this.copyBtn(key,'Copy our reply');
     const said=String(e['What they said']||'').replace(/^(@\w+\s*)+/,'');const reply=e['Our reply']||'';const owner=ownerName(e.Account);
     const FT={'Core buyer':'solid','Robotics leader':'solid','Robotics':'mid'};
     const actions=this.founder?[]:[...(reply?[act(cb.label,s.copied===key?'copied':'secondary',stop(()=>this.copy(reply,key,'Reply for '+name.split(' ')[0]+' copied')))]:[]),
-      act('Open their reply','primary',stop(()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');})),act('DM','secondary',stop(()=>this.go('pdm',{pdmTab:'To message'}))),
-      act('×','ghost',stop(()=>this.dismissEngager(e,name)))];
-    return{...a,id:e._key,name,role:e.Handle+' · '+(num(e.Followers)!=null?fmtK(num(e.Followers))+' followers':''),company:(e.How==='Quoted'?'Quoted ':'Replied to ')+owner+'’s post',
-      fund:pill(e.Fit||'Other',FT[e.Fit]||'neutral'),next:pill(reply?'Reply ready':'Reply being written','mid'),actions,open:()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');},
+      act('Open their reply','primary',stop(()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');})),
+      act('Replied ✓','secondary',stop(()=>this.markReplied(e,name))),act('×','ghost',stop(()=>this.dismissEngager(e,name)))];
+    const v=verdictOf(e);
+    return{...a,id:e._key,name,role:e.Handle+' · '+(num(e.Followers)!=null?fmtK(num(e.Followers))+' followers':''),company:e.Why||((e.How==='Quoted'?'Quoted ':'Replied to ')+owner+'’s post'),
+      fund:pill(v,VERD_T[v]||'neutral'),next:pill(reply?'Reply ready':'Reply being written','mid'),actions,open:()=>{const u=AK.safeUrl(e['Their link']);if(u)window.open(u,'_blank','noopener');},
       bt:i===0?'none':'1px solid var(--hairline)',op:'1',tf:'none',mh:'240px',py:'var(--row-py)',said:clip(said,160)+(reply?'  →  Our reply: '+reply:''),hasSaid:true,saidWhen:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',
       hasCall:false,call:'',ownerIni:owner[0],owner};}
   inboxVals(P){const L=this.lists(P);const R=this.postReplies();const n=this.state.more.posts||5;
-    const posts={id:'posts',title:'Replied to our posts',help:'Answer under their comment first, then DM the buyers.',count:String(R.length),rows:R.slice(0,n).map((e,i)=>this.engagerRow(e,i)),
+    const posts={id:'posts',title:'Reply to these',help:'Only people worth answering. "DM + reply" fit Aktoria’s ICP: reply, then DM them from People to DM.',count:String(R.length),rows:R.slice(0,n).map((e,i)=>this.engagerRow(e,i)),
       hasMore:R.length>n,moreN:String(Math.min(20,R.length-n)),more:()=>this.setState(s=>({more:{...s.more,posts:n+20}})),show:R.length>0};
     const groups=[this.group('rep','Reply now','They wrote back. Answer within a day.',L.rep,'reply'),posts,this.group('calls','Calls coming up','Open their card to prep: what they said, why now, and your notes.',L.calls,'call')].filter(g=>g.show);
     return{groups,noDM:false,hasGroups:groups.length>0,allClear:groups.length===0,showEveryone:()=>this.setOwner('Everyone')};}
@@ -445,30 +458,32 @@ class Component extends DCLogic {
     const days=DOW.map((dw,i)=>{const dt=new Date(start.getTime()+i*AK.DAY);const today=AK.sameDay(dt,new Date());
       return{dow:dw,date:dt,key:dkey(dt.getFullYear(),dt.getMonth(),dt.getDate()),num:String(dt.getDate()),mon:MON[dt.getMonth()],rel:Math.round((dt-t0)/AK.DAY),today};});
     const keys=new Set(days.map(d=>d.key));const accs=this.accs();
-    const placed=this.postList().filter(onCal).map(p=>({p,w:calWhere(p.o,zone)})).filter(x=>x.w&&keys.has(x.w.key)&&accs.some(a=>a.acc===x.p.account));
+    const plat=s.calPlat;const isLi=plat==='LinkedIn';
+    const placed=this.postList().filter(p=>onCal(p)&&platOf(p.o)===plat).map(p=>({p,w:calWhere(p.o,zone)})).filter(x=>x.w&&keys.has(x.w.key)&&accs.some(a=>a.acc===x.p.account));
     const kind=s.calKind;const shown=kind==='All'?placed:placed.filter(x=>x.p.kind===kind);
     const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;const n=k==='All'?placed.length:placed.filter(x=>x.p.kind===k).length;
       return{label:k,count:String(n),go:()=>this.setState({calKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink)',bd:on?'var(--ink)':'var(--hairline-strong)',dot:KIND_DOT[k]||'transparent',hasDot:k!=='All'};});
+    const plats=['X','LinkedIn'].map(x=>{const on=plat===x;return{label:x==='X'?'𝕏  X':'in  LinkedIn',go:()=>{store.set('calPlat',x);this.setState({calPlat:x,calPick:null});},bg:on?'var(--ink)':'transparent',fg:on?'#fff':'var(--ink-2)',sh:on?'var(--shadow-sm)':'none'};});
     const zones=['ist','pst'].map(z=>{const on=zone===z;return{label:ZONES[z].label,go:()=>{store.set('calZone',z);this.setState({calZone:z});},bg:on?'#fff':'transparent',fg:on?'var(--ink)':'var(--ink-3)',sh:on?'var(--shadow-sm)':'none'};});
     const has=(acc,key)=>placed.some(x=>x.p.account===acc&&x.w.key===key);
     const empty=accs.reduce((n,a)=>n+days.filter(d=>d.rel>=0&&!has(a.acc,d.key)).length,0);
     const boards=accs.map(a=>{
       const gaps=days.filter(d=>d.rel>=0&&!has(a.acc,d.key)).map(d=>d.dow);
-      const last=this.postList().filter(p=>p.account===a.acc&&p.link&&p.when<=Date.now()).sort((x,y)=>y.when-x.when)[0];
+      const last=this.postList().filter(p=>p.account===a.acc&&p.link&&platOf(p.o)===plat&&p.when<=Date.now()).sort((x,y)=>y.when-x.when)[0];
       const line=[gaps.length===7?'Nothing planned this week':gaps.length?'Nothing planned '+gaps.join(', '):'',last?'last post '+dLabel(last.when)+(last.ourViews?': '+last.ourViews+' views':''):''].filter(Boolean).join(' · ');
       const cols=days.map(d=>{const list=shown.filter(x=>x.p.account===a.acc&&x.w.key===d.key).sort((x,y)=>x.w.sort-y.w.sort);
         return{dow:d.dow,date:d.num+' '+d.mon,today:d.today,hfg:d.today?'var(--in-ink)':'var(--ink)',bg:d.today?'var(--in-soft)':'var(--n-soft)',cards:list.map(x=>this.calCard(x.p,x.w,a)),
-          canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'');},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
+          canAdd:!f,add:()=>{const r=toIst(d.key,'',zone);AK.calNew(a.acc,r.date,'',plat);},pick:()=>this.setState({calPick:{acc:a.acc,key:d.key},calPickKind:'All'}),
           over:e=>{e.preventDefault();},drop:e=>{e.preventDefault();this.calDrop(a,d);}};});
       const ti=days.findIndex(d=>d.today);
-      return{...a,...avatar(avName(a.name)),strip:days.map((d,i)=>({l:d.dow[0],full:d.dow+' '+d.num+' '+d.mon,go:()=>this.calScroll(a.acc,i),bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols,
+      return{...a,...avatar(avName(a.name)),icon:isLi?'in':'𝕏',iconBg:isLi?'#0a66c2':'var(--ink)',chip:isLi?LI_NAME[a.acc]||a.name:a.handle,strip:days.map((d,i)=>({l:d.dow[0],full:d.dow+' '+d.num+' '+d.mon,go:()=>this.calScroll(a.acc,i),bg:has(a.acc,d.key)?'var(--ink)':'var(--n-soft-2)',fw:d.today?'700':'500',fg:d.today?'var(--ink)':'var(--ink-3)'})),line,hasLine:!!line,cols,
         sid:'cal-'+a.acc,pan:e=>this.calPan(e),left:()=>this.calScroll(a.acc,'l'),right:()=>this.calScroll(a.acc,'r'),today:()=>{if(ti<0)this.setState({week:0});this.calScroll(a.acc,Math.max(0,ti<0?(new Date().getDay()+6)%7:ti));}};});
     // Open each board on today's column (once per week shown); the page may still be drawing, so try for a moment.
     const sk=off+'|'+accs.map(a=>a.acc).join();if(this._calSk!==sk){this._calSk=sk;const ti=days.findIndex(d=>d.today);let n=0;
       const go=()=>{if(accs.every(a=>document.getElementById('cal-'+a.acc))){accs.forEach(a=>this.calScroll(a.acc,ti<0?0:ti,true));}else if(n++<40)setTimeout(go,100);};setTimeout(go,50);}
     return{label:days[0].num+' '+days[0].mon+' – '+days[6].num+' '+days[6].mon,weekName:off===0?'This week':off===-1?'Last week':off===1?'Next week':off<0?Math.abs(off)+' weeks ago':'In '+off+' weeks',
       prev:()=>this.setState({week:off-1}),next:()=>this.setState({week:off+1}),now:()=>this.setState({week:0}),nowBg:off===0?'#fff':'transparent',nowSh:off===0?'var(--shadow-sm), var(--hi)':'none',
-      kinds,zones,boards,summary:placed.length+(placed.length===1?' post':' posts')+' this week',hasEmpty:empty>0,empty:empty+(empty===1?' empty day':' empty days')+' left',pick:this.calPickVals()};}
+      kinds,zones,plats,boards,summary:placed.length+(placed.length===1?' post':' posts')+' this week',hasEmpty:empty>0,empty:empty+(empty===1?' empty day':' empty days')+' left',pick:this.calPickVals()};}
   // Hold and drag the board's empty space to move left and right (cards, fields and buttons keep working as usual).
   calPan(e){if(e.button!==0||e.target.closest('input,textarea,select,button,label,a,img,[draggable="true"]'))return;
     const el=e.currentTarget,x0=e.clientX,l0=el.scrollLeft;el.style.cursor='grabbing';e.preventDefault();
@@ -482,9 +497,11 @@ class Component extends DCLogic {
     const setEd=(k,v)=>this.setState(x=>({calEd:{...x.calEd,[id]:{...(x.calEd[id]||{}),[k]:v}}}));
     const takeEd=k=>{const v=(this.state.calEd[id]||{})[k];if(v==null)return null;this.setState(x=>{const e={...(x.calEd[id]||{})};delete e[k];return{calEd:{...x.calEd,[id]:e}};});return v;};
     const txt=ed.text!=null?ed.text:p.text;const linkOpen=s.calLink===id;
+    const li=platOf(o)==='LinkedIn';const long=li&&txt.length>100;const open=!long||!!s.calOpen[id];
+    const setOpen=v=>this.setState(x=>({calOpen:{...x.calOpen,[id]:v}}));
     const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id).sort((x,y)=>y.when-x.when).slice(0,5)
       .map(x=>({line:clip(firstLine(x.text)||x.link,80),when:x.o._date?AK.dayWord(x.o._date):'',pick:()=>this.calLinkTo(p,x)})):[];
-    const media=AK.mediaIds(o['Media file']).map(m=>({src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
+    const media=AK.mediaIds(o['Media file']).map(m=>({video:!!(p.sug&&p.sug.video&&p.sug.url.indexOf(m)>=0),src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
       rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}));
     const cb=this.copyBtn('cal'+id,'Copy');const up=AK.S.busy.has('up'+o._key);
     return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,txtRo:f||!!p.link,rows:p.link?'4':'7',notLive:!p.link,canUp:!f&&!p.link,
@@ -492,7 +509,8 @@ class Component extends DCLogic {
       saveTime:()=>{const v=takeEd('time');if(v!=null&&v!==w.hm){const r=toIst(w.key,v,s.calZone);AK.calSave(o,{date:r.date,time:r.time});}},
       type:CAL_TYPES.includes(p.ptype)?p.ptype:'',setType:e=>AK.calSave(o,{type:e.target.value}),
       aimed:CAL_AIMED.includes(o['Aimed at'])?o['Aimed at']:'',setAimed:e=>AK.calSave(o,{aimed:e.target.value}),
-      name:a.name,handle:a.handle,...avatar(avName(a.name)),
+      name:li?LI_NAME[a.acc]||a.name:a.name,handle:li?'LinkedIn':a.handle,...avatar(avName(a.name)),
+      collapsed:!open,expanded:open,short:clip(txt.replace(/\s+/g,' '),100),more:()=>setOpen(true),canLess:long&&open,less:()=>setOpen(false),
       text:txt,setText:e=>setEd('text',e.target.value),saveText:()=>{const v=takeEd('text');if(v!=null&&v!==p.text)AK.calSave(o,{text:v});},
       media,hasMedia:media.length>0,
       status:st,stOpts:[...new Set([st,...CAL_ST])].map(v=>({v})),setStatus:e=>{const v=e.target.value;if(v==='Posted'&&!p.link){this.setState({calLink:id,calLinkVal:''});return;}AK.calSave(o,{status:v});},
@@ -500,11 +518,12 @@ class Component extends DCLogic {
       upload:e=>{const fl=e.target.files&&e.target.files[0];e.target.value='';if(fl)AK.calUpload(o,fl);},upLabel:up?'Uploading…':'Add image',
       remove:()=>this.calRemove(p),
       dragStart:e=>{this.dragId=id;try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}},drag:f?'false':'true',
-      hasLink:!!p.link,linkLabel:'Live on X'+(p.ourViews?' · '+p.ourViews+' views':''),openLink:()=>window.open(p.link,'_blank','noopener'),
+      hasLink:!!p.link,linkLabel:li?'Live on LinkedIn'+(num(o.Likes)?' · '+fmtK(num(o.Likes))+' reactions':'')+(num(o.Replies)?' · '+fmtK(num(o.Replies))+' comments':''):'Live on X'+(p.ourViews?' · '+p.ourViews+' views':''),openLink:()=>window.open(p.link,'_blank','noopener'),
       canLink:!p.link&&!f,toggleLink:()=>this.setState({calLink:linkOpen?null:id,calLinkVal:''}),linkOpen,linkVal:s.calLinkVal,
       setLinkVal:e=>this.setState({calLinkVal:e.target.value}),saveLink:()=>this.calLinkPaste(p,s.calLinkVal),
       linkPh:'Paste the post link (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',live,hasLive:live.length>0,
-      hasSug:!!p.sug&&!p.link&&!media.length,sugName:p.sug?clip(p.sug.name,34):'',sugWhy:p.sug?p.sug.why:'',openSug:()=>p.sug&&window.open(p.sug.url,'_blank','noopener')};}
+      hasSug:!!p.sug&&!p.link&&!media.length,sugThumb:p.sug?p.sug.thumb:'',sugVideo:!!(p.sug&&p.sug.video),
+      useSug:()=>{const cur=String(o['Media file']||'').trim();if(p.sug)AK.calSave(o,{media:(cur?cur+'\n':'')+p.sug.url});},sugName:p.sug?clip(p.sug.name,34):'',sugWhy:p.sug?p.sug.why:'',openSug:()=>p.sug&&window.open(p.sug.url,'_blank','noopener')};}
   // A card made on the calendar that is still empty is removed for good; any other post just leaves the calendar.
   calRemove(p){const blank=p.o['What we changed']==='Added in the calendar'&&!p.text.trim()&&!p.link;const was=p.o.Status||'Draft';const wasCal=p.o.Calendar||'';
     AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:'No'}).then(ok=>{if(ok)this.toast(blank?'Removed':'Taken off the calendar. It’s still in Our posts.',()=>AK.calSave(p.o,blank?{cal:'Yes',status:was}:{cal:wasCal}));});}
@@ -523,7 +542,7 @@ class Component extends DCLogic {
     const blank=p.o['What we changed']==='Added in the calendar'&&!p.link;
     await AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:''});this.setState({calLink:null,calLinkVal:''});this.toast('Linked to the live post');}
   calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const acc=pk.acc;const kind=s.calPickKind||'All';
-    let C=this.postList().filter(p=>p.account===acc&&!p.link&&!onCal(p));
+    let C=this.postList().filter(p=>p.account===acc&&!p.link&&!onCal(p)&&platOf(p.o)===s.calPlat);
     const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;return{label:k==='All'?'All types':k,count:String(k==='All'?C.length:C.filter(p=>p.kind===k).length),go:()=>this.setState({calPickKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});
     if(kind!=='All')C=C.filter(p=>p.kind===kind);
     C.sort((x,y)=>(y.o._date?y.o._date.getTime():0)-(x.o._date?x.o._date.getTime():0));
@@ -543,7 +562,7 @@ class Component extends DCLogic {
     return{...p,...avatar(p.comp),accAv:avatar(avName(p.acc)),accName:p.acc,st:pill(p.status,ST[p.status]),hasQ:!!p.q,hasNums:!!p.ourViews,noNums:!p.ourViews,actions,hasActions:actions.length>0,needsMedia:p.needsMedia,
       linkOpen:s.linkFor===p.id,linkVal:s.linkVal,linkPh:'Paste the link of '+p.acc+'’s post on X (x.com/'+(AK.HANDLES[p.account]||'…')+'/status/…)',onLink:e=>this.setState({linkVal:e.target.value}),saveLink:()=>this.markPosted(p),cancelLink:()=>this.setState({linkFor:null}),
       compare:()=>this.setState({cmpId:p.id,cmpOn:true}),copyQ:()=>this.copy('Question for Aktoria: '+p.q,qk,'Question copied for WhatsApp'),qLabel:qb.label,qbg:qb.bg,qfg:qb.fg,qsh:qb.sh,openDrive:e=>{e.preventDefault();if(p.folder)open(AK.folderUrl(p.folder.id));else this.toast('No Drive folder is set for this post in the sheet.',null,true);},
-      hasSug:!!p.sug&&p.status!=='Posted',sugName:p.sug?clip(p.sug.name,40):'',sugWhy:p.sug?p.sug.why:'',openSug:e=>{e.preventDefault();if(p.sug)open(p.sug.url);},tip:this.tipFor('rank'+p.id)};}
+      hasSug:!!p.sug&&p.status!=='Posted',sugThumb:p.sug?p.sug.thumb.replace('sz=w600','sz=w120'):'',sugName:p.sug?clip(p.sug.name,40):'',sugWhy:p.sug?p.sug.why:'',openSug:e=>{e.preventDefault();if(p.sug)open(p.sug.url);},tip:this.tipFor('rank'+p.id)};}
   async markScheduled(p){if(this.founder)return;const prev=p.o.Status||'';
     const ok=await AK.saveScheduled(p.o,true,{quiet:true});
     if(ok)this.toast('Marked as scheduled',AK.canRestore()?()=>this.restorePost(p,prev):null);}
@@ -564,7 +583,8 @@ class Component extends DCLogic {
         const ok=await AK.addPost({...v,status:v.link?'Posted':v.status});
         if(ok)this.setState({addOpen:false,addF:null,postsTab:v.link||v.status==='Posted'?'Posted':v.status==='Scheduled'?'Scheduled':'To post'});}};}
   async restorePost(p,prev){const o=AK.M.ours.find(x=>x._key===p.id)||p.o;if(await AK.restorePost(o,prev,''))this.toast('Undone');}
-  postsVals(){const s=this.state;const all=this.ownPosts();const P=s.postType==='All'?all:all.filter(p=>p.kind===s.postType);
+  postsVals(){const s=this.state;const all=this.ownPosts();
+    const plats=['All','X','LinkedIn'].map(x=>{const on=s.postPlat===x;return{label:x==='All'?'X + LinkedIn':x==='X'?'𝕏 X':'in LinkedIn',go:()=>this.setState({postPlat:x,linkFor:null}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});const P=s.postType==='All'?all:all.filter(p=>p.kind===s.postType);
     const inTab=all.filter(p=>p.status===s.postsTab);
     const types=['All',...POST_KINDS].map(k=>{const n=k==='All'?inTab.length:inTab.filter(p=>p.kind===k).length;const on=s.postType===k;
       return{label:k==='All'?'All types':k,count:String(n),go:()=>this.setState({postType:k,linkFor:null}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)',cbg:on?'rgba(255,255,255,.18)':'var(--n-soft)'};});
@@ -574,7 +594,7 @@ class Component extends DCLogic {
       return{who,...avatar(who),text:firstLine(t.Hook||t['Full text']),views:v?fmtK(v)+' views':fmtK(t._eng)+' eng.',age:(t.Platform||'X')+' · '+(t._date?AK.dayWord(t._date):t.Date||''),n:String(i+1).padStart(2,'0'),bt:i===0?'none':'1px solid var(--hairline)',canPlan:true,planLabel:cb.label,plan:()=>this.copy(t['Full text'],k,'Original copied: '+who)};});
     const ET={'To post':'Every drafted post is scheduled or posted. New drafts arrive every night: 12 options per account, post the best 3.','Scheduled':'Nothing is scheduled. Mark a post as scheduled once it’s set up in X.','Posted':'Nothing posted yet. Press Mark as posted with the link once a post is live.','Later':'Nothing parked for later.'};
     const emptyText=s.postType!=='All'?'No '+s.postType.toLowerCase()+' posts here. Pick All types to see the rest.':ET[s.postsTab]||'';
-    return{...this.addVals(),tabs,types,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
+    return{...this.addVals(),tabs,types,plats,list,empty:list.length===0,emptyTab:s.postsTab,emptyText,best,hasBest:best.length>0};}
   cmpVals(){const s=this.state;const list=this.ownPosts().length?this.ownPosts():this.postList();if(!list.length)return{...this.blankCmp()};let i=list.findIndex(p=>p.id===s.cmpId);if(i<0)i=0;const c=this.postCard(list[i]);
     return{...c,pos:(i+1)+' of '+list.length,prev:()=>this.setState({cmpId:list[(i-1+list.length)%list.length].id}),next:()=>this.setState({cmpId:list[(i+1)%list.length].id}),close:()=>this.setState({cmpOn:false})};}
   blankCmp(){return{rankLabel:'',st:pill('',''),pos:'',prev:()=>{},next:()=>{},close:()=>this.setState({cmpOn:false}),comp:'',compH:'',cText:'',cNums:'',accAv:{},accName:'',time:'',text:'',hasNums:false,noNums:true,ourViews:'',ourLikes:'',changed:'',media:'',ini:'',avBg:'',avFg:''};}
@@ -609,10 +629,10 @@ class Component extends DCLogic {
       fol,top,hasTop:top.length>0,noTop:!top.length,pat,hasPat:pat.length>0,noPat:!pat.length,rows,hasRows:rows.length>0,hasMore:!s.trkMore&&sorted.length>8,more:()=>this.setState({trkMore:true}),count:'Showing '+rows.length+' of '+sorted.length};}
 
   /* ---------- people to DM ---------- */
-  pdmCards(){return this.engagers().filter(e=>e.Status!=='Dismissed').map(e=>({id:e._key,e,name:e.Name||e.Handle,handle:e.Handle,followers:fmtK(num(e.Followers)),fit:e.Fit||'Other',dms:e['DMs open']==='Yes',bio:e.Bio||'No bio.',said:String(e['What they said']||'').replace(/^(@\w+\s*)+/,'')||'(no text)',kind:e.How==='Quoted'?'Quoted':'Replied to',on:clip(e['Our post'],90),when:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',msg:e['DM ready']||'',status:e.Status==='Messaged'?'Messaged':'To message',from:e['Send from']||e.Account}));}
+  pdmCards(){return this.engagers().filter(e=>verdictOf(e)==='DM + reply'&&!/^(Dismissed|Do not contact)$/.test(e.Status||'')).map(e=>({id:e._key,e,name:e.Name||e.Handle,handle:e.Handle,followers:fmtK(num(e.Followers)),fit:'DM + reply',dms:e['DMs open']==='Yes',bio:e.Why||e.Bio||'No bio.',said:String(e['What they said']||'').replace(/^(@\w+\s*)+/,'')||'(no text)',kind:e.How==='Quoted'?'Quoted':'Replied to',on:clip(e['Our post'],90),when:AK.dayWord(AK.parseDate(e['Found on']))||e['Found on']||'',msg:e['DM ready']||'',status:e.Status==='Messaged'?'Messaged':'To message',from:e['Send from']||e.Account}));}
   pdmVals(){const s=this.state;const ORDER={'Robotics leader':0,'Robotics':1,'Investor':2,'Other':3,'Not a buyer':4};const FT={'Robotics leader':'solid','Robotics':'mid','Investor':'neutral','Other':'neutral','Not a buyer':'ghost'};
     const all=this.pdmCards().sort((a,b)=>((ORDER[a.fit]??3)-(ORDER[b.fit]??3))||((b.dms?1:0)-(a.dms?1:0))||((num(b.e.Followers)||0)-(num(a.e.Followers)||0)));const by=t=>t==='All'?all:all.filter(p=>p.status===t);
-    const tabs=this.tabs([['To message',String(by('To message').length)],['Messaged',String(by('Messaged').length)],['All',String(all.length)]],s.pdmTab,t=>this.setState({pdmTab:t}));
+    const tabs=this.tabs([['To message',String(by('To message').length)],['Messaged',String(by('Messaged').length)]],s.pdmTab==='All'?'To message':s.pdmTab,t=>this.setState({pdmTab:t}));
     const cards=by(s.pdmTab).slice(0,s.more.pdm||12).map((p,i)=>{const k=p.id+'d';const cb=this.copyBtn(k,'Copy');const lv=!!s.leaving[p.id];
       return{...p,...avatar(p.name),fitP:pill(p.fit,FT[p.fit]||'neutral'),dmsLabel:p.dms?'DMs open':'DMs closed',dmsDot:p.dms?'var(--ok)':'var(--ink-4)',dmsFg:p.dms?'var(--ok-ink)':'var(--ink-3)',copyLabel:cb.label,cbg:cb.bg,cfg:cb.fg,csh:cb.sh,copy:()=>this.copy(p.msg,k,'Message for '+p.name.split(' ')[0]+' copied'),canMark:p.status==='To message'&&!this.founder,isDone:p.status==='Messaged',
         mark:()=>this.markMessaged(p),canX:!this.founder,x:()=>this.dismissEngager(p.e,p.name),
@@ -625,6 +645,9 @@ class Component extends DCLogic {
   // x on a DM row: the person moves to Closed in the pipeline (sheet Status "Not now"), with Undo.
   async dismissPerson(p){if(this.founder)return;const was=p.stage;await this.setStage(p.id,'Closed','Cleared '+p.first+'. They’re under Closed in Pipeline.');
     const q=this.findP(p.id);if(q&&q.stage==='Closed')this.toast('Cleared '+p.first+'. They’re under Closed in Pipeline.',()=>this.setStage(p.id,was,'Undone'));}
+  // Replied ✓: the public reply is posted. "DM + reply" people stay in People to DM until they're messaged.
+  async markReplied(e,name){if(this.founder)return;const prev=await AK.saveEngager(e,'Replied');
+    if(prev)this.toast('Replied to '+String(name||e.Handle).split(' ')[0]+(verdictOf(e)==='DM + reply'?'. Now DM them from People to DM.':''),async()=>{if(await AK.saveEngager(e,prev))this.toast('Undone');});}
   markMessaged(p){if(this.founder)return;const prevS=p.e.Status||'',prevW=p.e['Messaged on']||'';
     this.setState(st=>({leaving:{...st.leaving,[p.id]:true}}));
     setTimeout(async()=>{const ok=await AK.saveMessaged(p.e,{quiet:true});
@@ -1433,7 +1456,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <button onClick="{{ cal.next }}" style="height:30px; padding:0 10px; border:0; border-radius:9px; background:transparent; font-size:var(--fs-xs); font-weight:500; color:var(--ink-2); cursor:pointer;" style-hover="background:#fff; color:var(--ink);">→</button>
 </div>
 <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-size:var(--fs-lg); font-weight:600; letter-spacing:-0.015em;">{{ cal.label }}</span><span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ cal.weekName }}</span></div>
-<div title="Show times in India or Pacific time" style="margin-left:auto; display:flex; gap:2px; padding:3px; border-radius:var(--r-md); background:var(--n-soft); box-shadow:inset 0 0 0 1px var(--hairline);">
+<div style="margin-left:auto; display:flex; gap:2px; padding:3px; border-radius:var(--r-md); background:var(--n-soft); box-shadow:inset 0 0 0 1px var(--hairline);"><sc-for list="{{ cal.plats }}" as="pl"><button onClick="{{ pl.go }}" style="height:28px; padding:0 12px; border:0; border-radius:8px; background:{{ pl.bg }}; color:{{ pl.fg }}; box-shadow:{{ pl.sh }}; font-size:var(--fs-xs); font-weight:600; cursor:pointer; white-space:pre;">{{ pl.label }}</button></sc-for></div>
+<div title="Show times in India or Pacific time" style="display:flex; gap:2px; padding:3px; border-radius:var(--r-md); background:var(--n-soft); box-shadow:inset 0 0 0 1px var(--hairline);">
 <sc-for list="{{ cal.zones }}" as="z"><button onClick="{{ z.go }}" style="height:28px; padding:0 12px; border:0; border-radius:8px; background:{{ z.bg }}; color:{{ z.fg }}; box-shadow:{{ z.sh }}; font-family:var(--font-mono); font-size:var(--fs-2xs); font-weight:600; cursor:pointer;">{{ z.label }}</button></sc-for>
 </div>
 </div>
@@ -1461,7 +1485,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <sc-for list="{{ cal.boards }}" as="b">
 <section style="display:flex; flex-direction:column; gap:10px; padding-top:var(--s-2);">
 <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-<span style="display:inline-flex; align-items:center; gap:9px; height:38px; padding:0 16px 0 6px; border-radius:var(--r-pill); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong);"><span style="width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:var(--ink); color:#fff; font-size:13px; font-weight:700;">𝕏</span><span style="font-size:var(--fs-sm); font-weight:600;">{{ b.handle }}</span></span>
+<span style="display:inline-flex; align-items:center; gap:9px; height:38px; padding:0 16px 0 6px; border-radius:var(--r-pill); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong);"><span style="width:28px; height:28px; border-radius:50%; display:grid; place-items:center; background:{{ b.iconBg }}; color:#fff; font-size:13px; font-weight:700;">{{ b.icon }}</span><span style="font-size:var(--fs-sm); font-weight:600;">{{ b.chip }}</span></span>
 <div style="display:flex; gap:5px;"><sc-for list="{{ b.strip }}" as="d"><button onClick="{{ d.go }}" title="Go to {{ d.full }}" style="display:flex; flex-direction:column; align-items:center; gap:4px; padding:0; border:0; background:transparent; cursor:pointer;"><span style="font-size:var(--fs-3xs); font-weight:{{ d.fw }}; color:{{ d.fg }};">{{ d.l }}</span><span style="width:30px; height:8px; border-radius:3px; background:{{ d.bg }};"></span></button></sc-for></div>
 <div style="margin-left:auto; display:flex; align-items:center; gap:6px;"><button onClick="{{ b.left }}" title="Earlier days" style="width:36px; height:36px; border:0; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:16px; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">‹</button><button onClick="{{ b.today }}" style="height:36px; padding:0 14px; border:0; border-radius:var(--r-pill); background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:var(--fs-xs); font-weight:600; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">Today</button><button onClick="{{ b.right }}" title="Later days" style="width:36px; height:36px; border:0; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px var(--hairline-strong); font-size:16px; color:var(--ink); cursor:pointer;" style-hover="background:var(--n-soft);">›</button></div>
 </div>
@@ -1486,9 +1510,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span style="width:30px; height:30px; flex:0 0 30px; border-radius:50%; display:grid; place-items:center; font-size:var(--fs-3xs); font-weight:600; background:{{ k.avBg }}; color:{{ k.avFg }};">{{ k.ini }}</span>
 <span style="display:flex; flex-direction:column; line-height:1.3; min-width:0;"><span style="font-size:var(--fs-sm); font-weight:600;">{{ k.name }}</span><span style="font-size:var(--fs-xs); color:var(--ink-3);">{{ k.handle }}</span></span>
 </div>
-<textarea value="{{ k.text }}" onChange="{{ k.setText }}" onBlur="{{ k.saveText }}" disabled="{{ k.txtRo }}" placeholder="Write the post…" rows="{{ k.rows }}" style="width:100%; box-sizing:border-box; padding:2px 0; border:0; background:transparent; font-size:var(--fs-sm); line-height:1.5; font-family:inherit; color:var(--ink); resize:vertical; outline:none;"></textarea>
-<sc-if value="{{ k.hasMedia }}"><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px;"><sc-for list="{{ k.media }}" as="m"><div style="position:relative;"><img src="{{ m.src }}" onClick="{{ m.open }}" alt="Attached media" style="display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:var(--n-soft); cursor:pointer;"><sc-if value="{{ m.canRm }}"><button onClick="{{ m.rm }}" title="Remove" style="position:absolute; top:5px; right:5px; width:22px; height:22px; border:0; border-radius:50%; background:rgba(19,20,24,.7); color:#fff; font-size:13px; line-height:1; cursor:pointer;">×</button></sc-if></div></sc-for></div></sc-if>
-<sc-if value="{{ k.hasSug }}"><button onClick="{{ k.openSug }}" title="{{ k.sugWhy }}" style="align-self:flex-start; display:inline-flex; align-items:center; gap:6px; max-width:100%; height:28px; padding:0 12px; border:0; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-xs); font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">★&nbsp;Use:&nbsp;{{ k.sugName }}&nbsp;↗</button></sc-if>
+<sc-if value="{{ k.collapsed }}"><div style="font-size:var(--fs-sm); line-height:1.5; color:var(--ink); white-space:pre-wrap;">{{ k.short }} <button onClick="{{ k.more }}" style="padding:0; border:0; background:transparent; font-size:var(--fs-sm); font-weight:600; color:var(--in-ink); cursor:pointer;">Read&nbsp;more</button></div></sc-if>
+<sc-if value="{{ k.expanded }}"><textarea value="{{ k.text }}" onChange="{{ k.setText }}" onBlur="{{ k.saveText }}" disabled="{{ k.txtRo }}" placeholder="Write the post…" rows="{{ k.rows }}" style="width:100%; box-sizing:border-box; padding:2px 0; border:0; background:transparent; font-size:var(--fs-sm); line-height:1.5; font-family:inherit; color:var(--ink); resize:vertical; outline:none;"></textarea><sc-if value="{{ k.canLess }}"><button onClick="{{ k.less }}" style="align-self:flex-start; padding:0; border:0; background:transparent; font-size:var(--fs-xs); font-weight:600; color:var(--ink-3); cursor:pointer;">Show&nbsp;less</button></sc-if></sc-if>
+<sc-if value="{{ k.hasMedia }}"><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:6px;"><sc-for list="{{ k.media }}" as="m"><div style="position:relative;"><img src="{{ m.src }}" onClick="{{ m.open }}" alt="Attached media" style="display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:var(--n-soft); cursor:pointer;"><sc-if value="{{ m.video }}"><span style="position:absolute; left:6px; bottom:6px; height:20px; padding:0 7px; display:inline-flex; align-items:center; border-radius:var(--r-pill); background:rgba(19,20,24,.72); color:#fff; font-size:10px; font-weight:600;">▶</span></sc-if><sc-if value="{{ m.canRm }}"><button onClick="{{ m.rm }}" title="Remove" style="position:absolute; top:5px; right:5px; width:22px; height:22px; border:0; border-radius:50%; background:rgba(19,20,24,.7); color:#fff; font-size:13px; line-height:1; cursor:pointer;">×</button></sc-if></div></sc-for></div></sc-if>
+<sc-if value="{{ k.hasSug }}"><div style="display:flex; flex-direction:column; gap:6px; padding:6px; border-radius:10px; background:var(--in-soft);"><div style="position:relative;"><img src="{{ k.sugThumb }}" onClick="{{ k.openSug }}" alt="Suggested photo or video" style="display:block; width:100%; aspect-ratio:16/10; object-fit:cover; border-radius:8px; background:#fff; cursor:pointer;"><sc-if value="{{ k.sugVideo }}"><span style="position:absolute; left:8px; bottom:8px; height:22px; padding:0 8px; display:inline-flex; align-items:center; border-radius:var(--r-pill); background:rgba(19,20,24,.72); color:#fff; font-size:var(--fs-3xs); font-weight:600;">▶&nbsp;Video</span></sc-if></div><div style="display:flex; align-items:center; gap:6px;"><span title="{{ k.sugWhy }}" style="flex:1; min-width:0; padding-left:4px; font-size:var(--fs-3xs); font-weight:600; color:var(--in-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">★&nbsp;{{ k.sugName }}</span><sc-if value="{{ k.canUp }}"><button onClick="{{ k.useSug }}" title="Attach it to this post" style="height:26px; padding:0 10px; border:0; border-radius:7px; background:var(--ink); color:#fff; font-size:var(--fs-3xs); font-weight:600; cursor:pointer;">Attach</button></sc-if><button onClick="{{ k.openSug }}" style="height:26px; padding:0 10px; border:0; border-radius:7px; background:#fff; font-size:var(--fs-3xs); font-weight:600; color:var(--ink); cursor:pointer;">Open&nbsp;↗</button></div></div></sc-if>
 <sc-if value="{{ k.hasLink }}"><button onClick="{{ k.openLink }}" style="align-self:flex-start; height:28px; padding:0 12px; border:0; border-radius:var(--r-pill); background:var(--ok-soft); color:var(--ok-ink); font-size:var(--fs-xs); font-weight:600; cursor:pointer;">{{ k.linkLabel }} ↗</button></sc-if>
 <sc-if value="{{ k.linkOpen }}">
 <div style="display:flex; flex-direction:column; gap:8px; padding:10px; border-radius:10px; background:var(--n-soft);">
@@ -1523,7 +1548,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </div>
 </div>
 <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:calc(-1 * var(--s-2));">
-<sc-for list="{{ posts.types }}" as="c"><button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button></sc-for>
+<sc-for list="{{ posts.plats }}" as="pl"><button onClick="{{ pl.go }}" style="display:inline-flex; align-items:center; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ pl.bd }}; background:{{ pl.bg }}; color:{{ pl.fg }}; font-size:var(--fs-sm); font-weight:600; cursor:pointer; white-space:nowrap;">{{ pl.label }}</button></sc-for><span style="width:1px; height:22px; margin:4px 4px; background:var(--hairline-strong);"></span><sc-for list="{{ posts.types }}" as="c"><button onClick="{{ c.go }}" style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:var(--r-pill); border:1px solid {{ c.bd }}; background:{{ c.bg }}; color:{{ c.fg }}; font-size:var(--fs-sm); font-weight:500; cursor:pointer; white-space:nowrap;">{{ c.label }}<span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ c.cbg }};">{{ c.count }}</span></button></sc-for>
 <sc-if value="{{ posts.canAdd }}"><button onClick="{{ posts.toggleAdd }}" style="margin-left:auto; display:inline-flex; align-items:center; height:30px; padding:0 14px; border-radius:var(--r-pill); border:1px solid var(--ink); background:#fff; color:var(--ink); font-size:var(--fs-sm); font-weight:500; cursor:pointer;">{{ posts.addLabel }}</button></sc-if>
 </div>
 <sc-if value="{{ posts.addOpen }}">
@@ -1551,7 +1576,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <span onMouseEnter="{{ p.tip.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ p.tip.show }}" style="position:relative; display:inline-grid; place-items:center; width:14px; height:14px; border-radius:50%; font-family:var(--font-mono); font-size:8.5px; font-weight:600; box-shadow:inset 0 0 0 1px var(--in-line); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-12px; width:240px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ p.tip.op }}; transform:{{ p.tip.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">{{ p.tipText }}</span></span>
 </span>
 <span style="display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border-radius:var(--r-pill); font-size:var(--fs-2xs); color:var(--ink-2); background:var(--n-soft);">{{ p.media }}</span>
-<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↗</a></sc-if>
+<sc-if value="{{ p.hasSug }}"><a href="#" onClick="{{ p.openSug }}" title="{{ p.sugWhy }}" style="display:inline-flex; align-items:center; height:26px; padding:0 11px; border-radius:var(--r-pill); background:var(--in-soft); color:var(--in-ink); font-size:var(--fs-2xs); font-weight:600; text-decoration:none; white-space:nowrap;" style-hover="filter:brightness(.97);"><img src="{{ p.sugThumb }}" alt="" style="width:20px; height:20px; margin:0 7px 0 -6px; border-radius:50%; object-fit:cover; background:#fff;">★&nbsp;Use:&nbsp;{{ p.sugName }}&nbsp;↗</a></sc-if>
 <sc-if value="{{ p.needsMedia }}"><a href="#" onClick="{{ p.openDrive }}" style="font-size:var(--fs-2xs); font-weight:500; color:var(--in-ink); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--in-line);" style-hover="color:var(--ink);">Drive folder ↗</a></sc-if>
 <button onClick="{{ p.compare }}" title="Compare full screen" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 10px; border:0; border-radius:var(--r-btn); background:transparent; font-size:var(--fs-xs); font-weight:500; color:var(--ink-2); cursor:pointer; transition:all var(--dur);" style-hover="background:rgba(255,255,255,.85); color:var(--ink); box-shadow:var(--shadow-xs);">
 <svg width="13" height="13" viewBox="0 0 24 24" style="fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>Full screen</button>
@@ -1653,7 +1678,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <section style="display:flex; flex-direction:column; gap:var(--s-3); opacity:{{ E.op }}; transition:opacity 500ms var(--ease) 80ms;">
 <div style="display:flex; align-items:center; gap:8px;">
 <h2 style="margin:0; font-size:var(--fs-lg); font-weight:600; letter-spacing:-0.015em;">This week</h2>
-<span onMouseEnter="{{ tips.week.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ tips.week.show }}" style="position:relative; display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--ink-3); box-shadow:inset 0 0 0 1px var(--hairline-strong); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-8px; width:260px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ tips.week.op }}; transform:{{ tips.week.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">Green: 5 posts and engagement went up. Yellow: fewer posts, or engagement stayed flat. Red: nothing posted, or engagement fell by more than half.</span></span>
+<span onMouseEnter="{{ tips.week.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ tips.week.show }}" style="position:relative; display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--ink-3); box-shadow:inset 0 0 0 1px var(--hairline-strong); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:-8px; width:260px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ tips.week.op }}; transform:{{ tips.week.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">Green: 3 posts and engagement went up. Yellow: fewer posts, or engagement stayed flat. Red: nothing posted, or engagement fell by more than half.</span></span>
 </div>
 <div style="padding:var(--s-4); border-radius:var(--r-lg); background:var(--glass); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); border:1px solid var(--glass-edge); box-shadow:var(--shadow-md), var(--hi); overflow-x:auto;">
 <div style="display:grid; grid-template-columns:120px repeat(5, minmax(64px, 1fr)); gap:6px; min-width:470px;">
@@ -1794,7 +1819,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <button onClick="{{ t.go }}" style="display:flex; align-items:center; gap:7px; height:32px; padding:0 12px; border:0; border-radius:9px; font-size:var(--fs-sm); font-weight:500; white-space:nowrap; cursor:pointer; background:{{ t.bg }}; color:{{ t.fg }}; box-shadow:{{ t.sh }}; transition:all var(--dur) var(--ease);" style-hover="color:var(--ink);" style-active="transform:scale(.97);">{{ t.label }}<sc-if value="{{ t.hasCount }}"><span style="font-family:var(--font-mono); font-size:var(--fs-3xs); padding:1px 6px; border-radius:var(--r-pill); background:{{ t.cbg }};">{{ t.count }}</span></sc-if></button>
 </sc-for>
 </div>
-<span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-xs); color:var(--ink-3);">Robotics people first
+<span style="display:flex; align-items:center; gap:6px; font-size:var(--fs-xs); color:var(--ink-3);">Only people who fit Aktoria’s ICP
 <span onMouseEnter="{{ tips.dms.show }}" onMouseLeave="{{ hideTip }}" onClick="{{ tips.dms.show }}" style="position:relative; display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--ink-3); box-shadow:inset 0 0 0 1px var(--hairline-strong); cursor:help;">i<span role="tooltip" style="position:absolute; top:calc(100% + 8px); left:50%; margin-left:-130px; width:260px; padding:10px 12px; border-radius:var(--r-md); background:var(--tooltip-bg); color:#fff; font-family:var(--font-sans); font-size:var(--fs-xs); font-weight:400; line-height:1.45; text-align:left; box-shadow:var(--shadow-lg); pointer-events:none; z-index:30; opacity:{{ tips.dms.op }}; transform:{{ tips.dms.tf }}; transition:opacity var(--dur) var(--ease), transform var(--dur) var(--ease);">People who replied to or quoted one of our posts. Robotics leaders come first, then robotics, investors and everyone else. “DMs open” means anyone can message them on X.</span></span>
 </span>
 </div>

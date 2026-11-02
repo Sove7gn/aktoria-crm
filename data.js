@@ -26,7 +26,7 @@ const RANGES={
   accounts:"'Our Accounts'!A3:H6",
   weekly:"'Our Accounts'!A8:E40",
   tracking:"'Post Tracking'!A3:J5000",
-  engagers:"'Post Engagers'!A3:R2000",  // R = "Our reply", written by the aktoria-engager-replies task
+  engagers:"'Post Engagers'!A3:T2000",  // R "Our reply", S "Verdict", T "Why": written by the aktoria-engager-replies task
 };
 // The sheet's Apps Script web app (aktoria-leads/xdm/sheet_sync.gs). From this page it can only mark one of our posts
 // posted/scheduled, one engager messaged, or change the plain DM Pipeline cells; the token below allows nothing else.
@@ -216,9 +216,11 @@ function build(){
     return r}).filter(r=>r.Status!=="Deleted"):[];
   // Cards made on the calendar that the sheet hasn't shown yet.
   S.calTemp=S.calTemp.filter(t=>!(t.row&&M.ours.some(r=>r._row===t.row)));
-  for(const t of S.calTemp){const r={_row:t.key,_key:"o"+t.key,_temp:true,Date:t.date,"Time (IST)":t.time,Account:t.account,Platform:"X",Competitor:"Our own",
+  for(const t of S.calTemp){const r={_row:t.key,_key:"o"+t.key,_temp:true,Date:t.date,"Time (IST)":t.time,Account:t.account,Platform:t.platform||"X",Competitor:"Our own",
     "What we changed":"Added in the calendar",Status:"Draft",Calendar:"Yes","Our version":""};calOverlay(r,t.key);r._date=parseDate(r.Date);if(r.Status!=="Deleted")M.ours.push(r)}
   M.tracking=S.raw.tracking?toObjects(S.raw.tracking,0,3).rows.filter(r=>r["Post link"]).map(r=>{r._t=Date.parse(String(r["Checked at (IST)"]).replace(" ","T")+"+05:30")||0;return r}):[];
+  // LinkedIn snapshots (2 Nov) stay out of the X numbers (views, followers, the weekly grid): kept on their own.
+  M.trackingLi=M.tracking.filter(r=>/linkedin\.com/i.test(r["Post link"]));M.tracking=M.tracking.filter(r=>!/linkedin\.com/i.test(r["Post link"]));
   M.engagers=S.raw.engagers?toObjects(S.raw.engagers,0,3).rows.filter(r=>r.Handle).map(r=>{r._key="e"+r._row;
     const ml=S.messagedLocal[r._row];
     if(ml&&ml.undo&&Date.now()-ml.at<6e5){r.Status=ml.status;r["Messaged on"]=ml.when}
@@ -474,6 +476,8 @@ function isNew(p){
 const newPosts=()=>M.theirs.filter(isNew).sort((a,b)=>b._date-a._date);
 /* ---------- mark posted / scheduled / messaged (claude.ai: the Sheets connector; public page: the sheet's Apps Script) ---------- */
 function ourPostLink(raw,account){
+  const li=String(raw||"").trim().match(/^https?:\/\/(?:[a-z]+\.)?linkedin\.com\/(?:posts|feed\/update)\/[^\s?#]+/i);
+  if(li)return li[0];
   const m=String(raw||"").trim().match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status\/(\d+)/i);
   const hd=HANDLES[account];
   return m&&hd&&m[1].toLowerCase()===hd.toLowerCase()?"https://x.com/"+hd+"/status/"+m[2]:null;
@@ -640,17 +644,17 @@ const rawText=row=>{const g=S.raw.ours||[];const r=g[row-3];return r?snip(r[9]):
 let calQ=Promise.resolve();
 function queue(fn){const run=calQ.then(fn);calQ=run.then(()=>{},()=>{});return run}
 // A new card for an account on a day ("D Mon YYYY"); time is IST ("7:30 PM") or blank. Returns the card's id.
-function calNew(account,date,time){
-  const key="n"+Date.now().toString(36);
-  const t={key,account,date,time:time||"",row:null};
+function calNew(account,date,time,platform){
+  const key="n"+Date.now().toString(36);platform=platform==="LinkedIn"?"LinkedIn":"X";
+  const t={key,account,date,time:time||"",row:null,platform};
   S.calTemp.push(t);build();emit();
   t.ready=queue(async()=>{
     let row;
     if(S.mcp){
       row=3+(S.raw.ours||[]).length;
-      await putCells("'Our Posts'!A"+row+":Z"+row,[[weekOf(date),date,time||"",account,"X","","Our own","","","","Added in the calendar","","","","Draft",
+      await putCells("'Our Posts'!A"+row+":Z"+row,[[weekOf(date),date,time||"",account,platform,"","Our own","","","","Added in the calendar","","","","Draft",
         "","","","","","","","","","","Yes"]]);
-    }else row=Number(String(await scriptCall({action:"calSave",account,date,time:time||"",cal:"Yes",status:"Draft"})).split(" ")[1]);
+    }else row=Number(String(await scriptCall({action:"calSave",account,date,time:time||"",cal:"Yes",status:"Draft",platform})).split(" ")[1]);
     if(!row)throw new Error("the sheet didn't say which row it used");
     t.row=row;S.calAlias[row]=key;S.calText[row]="";
     if(S.calLocal[key])S.calLocal[row]=S.calLocal[key];
@@ -796,19 +800,20 @@ function patterns(all){
   return [["Best post type",best(t=>t.plan&&t.plan["Post type"])],["Best account",best(t=>t.account)],["Best hour",best(hourOf)]]
     .filter(x=>x[1]).map(([label,b])=>({label,k:b.top.k,sub:r1(b.top.m)+" per 1K views over "+b.top.n+" posts (lowest: "+b.low.k+", "+r1(b.low.m)+")"}));
 }
-// This week, Monday to Friday (Post tracker). Green: 5 posts and engagement grew vs the day before. Red: nothing posted,
+// This week, Monday to Friday (Post tracker). Green: 3 posts and engagement grew vs the day before. Red: nothing posted,
 // or engagement gained fell by more than half. Yellow: everything in between. Days still to come stay grey.
 function weekGrid(accts){
   const start=weekStart(0),days=Array.from({length:5},(_,i)=>new Date(start.getTime()+i*DAY));
-  const engAt=(a,t)=>{const last=new Map();for(const r of M.tracking){if(r.Account!==a||r._t>t)continue;const k=linkKey(r["Post link"]);const p=last.get(k);if(!p||r._t>p._t)last.set(k,r)}
+  const engAt=(a,t)=>{const last=new Map();for(const r of M.tracking){if(r.Account!==a||r._t>t||/linkedin\.com/i.test(r["Post link"]||""))continue;const k=linkKey(r["Post link"]);const p=last.get(k);if(!p||r._t>p._t)last.set(k,r)}
     let s=0;for(const r of last.values())s+=["Likes","Replies","Reposts","Quotes","Bookmarks"].map(c=>num(r[c])||0).reduce((x,y)=>x+y,0);return s};
   const gained=(a,d)=>engAt(a,d.getTime()+DAY-1)-engAt(a,d.getTime()-1);
-  const postsOn=(a,d)=>M.ours.filter(p=>p.Account===a&&postStage(p)==="posted"&&sameDay(p._date,d)).length;
+  // X only: LinkedIn posts (Platform "LinkedIn") have their own cadence and calendar.
+  const postsOn=(a,d)=>M.ours.filter(p=>p.Account===a&&!/linkedin/i.test(p.Platform||"")&&postStage(p)==="posted"&&sameDay(p._date,d)).length;
   const now=new Date();
   return accts.map(a=>({account:a,cells:days.map(d=>{
     if(d.getTime()>now.getTime())return {k:"future",n:null,day:d,tomorrow:sameDay(d,new Date(now.getTime()+DAY))};
     const n=postsOn(a,d),g=gained(a,d),prev=gained(a,new Date(d.getTime()-DAY));
-    const k=n===0||(prev>0&&g<prev*.5)?"red":n>=5&&g>=prev?"green":"yellow";
+    const k=n===0||(prev>0&&g<prev*.5)?"red":n>=3&&g>=prev?"green":"yellow";
     return {k,n,g,prev,pct:prev>0?Math.round((g-prev)/prev*100):null,today:sameDay(d,now),day:d};
   })}));
 }
