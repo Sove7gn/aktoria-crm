@@ -517,7 +517,7 @@ class Component extends DCLogic {
       name:li?LI_NAME[a.acc]||a.name:a.name,handle:li?'LinkedIn':a.handle,...avatar(avName(a.name)),
       collapsed:!open,expanded:open,short:clip(txt.replace(/\s+/g,' '),100),more:()=>setOpen(true),canLess:long&&open,less:()=>setOpen(false),
       text:txt,setText:e=>setEd('text',e.target.value),saveText:()=>{const v=takeEd('text');if(v!=null&&v!==p.text)AK.calSave(o,{text:v});},
-      media,hasMedia:media.length>0,
+      media,hasMedia:media.length>0,mediaCols:media.length>1?'repeat(2, 1fr)':'1fr',mediaRatio:media.length>1?'1':'auto',mediaFit:media.length>1?'cover':'contain',
       status:st,stOpts:[...new Set([st,...CAL_ST])].map(v=>({v})),setStatus:e=>{const v=e.target.value;if(v==='Posted'&&!p.link){this.setState({calLink:id,calLinkVal:''});return;}AK.calSave(o,{status:v});},
       copy:()=>this.copy(txt,'cal'+id,'Post copied'),copyLabel:cb.label,
       upload:e=>{const fl=e.target.files&&e.target.files[0];e.target.value='';if(fl)AK.calUpload(o,fl);},upLabel:up?'Uploading…':'Add image',
