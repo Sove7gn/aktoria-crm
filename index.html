@@ -514,7 +514,10 @@ class Component extends DCLogic {
     const live=linkOpen?this.postList().filter(x=>x.account===p.account&&x.link&&x.id!==id).sort((x,y)=>y.when-x.when).slice(0,5)
       .map(x=>({line:clip(firstLine(x.text)||x.link,80),when:x.o._date?AK.dayWord(x.o._date):'',pick:()=>this.calLinkTo(p,x)})):[];
     const media=AK.mediaIds(o['Media file']).map(m=>({video:!!(p.sug&&p.sug.video&&p.sug.url.indexOf(m)>=0),src:'https://drive.google.com/thumbnail?id='+m+'&sz=w600',open:()=>window.open('https://drive.google.com/file/d/'+m+'/view','_blank','noopener'),
-      rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}));
+      rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(u=>u&&u.indexOf(m)<0).join('\n');AK.calSave(o,{media:keep});}),canRm:!f}))
+      // Plain image links too (e.g. graphics hosted next to this page): shown as they are, open full size to download.
+      .concat(String(o['Media file']||'').split(/\s+/).filter(u=>/^https?:\/\/\S+\.(png|jpe?g|webp|gif)$/i.test(u)&&!/drive\.google/.test(u)).map(u=>({video:false,src:u,open:()=>window.open(u,'_blank','noopener'),
+        rm:stop(()=>{const keep=String(o['Media file']||'').split(/\s+/).filter(x=>x&&x!==u).join('\n');AK.calSave(o,{media:keep});}),canRm:!f})));
     const cb=this.copyBtn('cal'+id,'Copy');const up=AK.S.busy.has('up'+o._key);
     return{id,st,pbg:pc[0],pfg:pc[1],ro:f,canEdit:!f,txtRo:f||!!p.link,rows:p.link?'4':'7',notLive:!p.link,canUp:!f&&!p.link,
       time:ed.time!=null?ed.time:w.hm,zone:ZONES[s.calZone].label,setTime:e=>setEd('time',e.target.value),
@@ -548,11 +551,13 @@ class Component extends DCLogic {
     const dup=l&&this.postList().find(x=>x.id!==p.id&&x.link&&AK.linkKey(x.link)===AK.linkKey(l));
     if(dup)return this.calLinkTo(p,dup);
     AK.calSave(p.o,{link:v}).then(ok=>{if(ok){this.setState({calLink:null,calLinkVal:''});this.toast('Linked. The tracker follows its views and replies.');}});}
-  async calLinkTo(p,x){const f={cal:'Yes'};if(CAL_TYPES.includes(p.ptype)&&!CAL_TYPES.includes(x.ptype))f.type=p.ptype;
-    if(p.o['Aimed at']&&!x.o['Aimed at'])f.aimed=p.o['Aimed at'];if(p.o['Media file']&&!x.o['Media file'])f.media=p.o['Media file'];
-    if(!await AK.calSave(x.o,f))return;
-    const blank=p.o['What we changed']==='Added in the calendar'&&!p.link;
-    await AK.calSave(p.o,blank?{cal:'',status:'Deleted'}:{cal:''});this.setState({calLink:null,calLinkVal:''});this.toast('Linked to the live post');}
+  // Linking keeps the card the team wrote (its text, slot, media and day) and gives it the live post's link. If the
+  // tracker had already added that post as its own row, that duplicate is removed so the post is counted once.
+  async calLinkTo(p,x){
+    if(!await AK.calSave(p.o,{link:x.link,cal:'Yes'}))return;
+    const trackerRow=/the tracker added it/i.test(x.o['What we changed']||'');
+    await AK.calSave(x.o,trackerRow?{cal:'No',status:'Deleted'}:{cal:'No'});
+    this.setState({calLink:null,calLinkVal:''});this.toast('Linked to the live post. The tracker follows its numbers from here.');}
   calPickVals(){const s=this.state;const pk=s.calPick;if(!pk)return{open:false};const acc=pk.acc;const kind=s.calPickKind||'All';
     let C=this.postList().filter(p=>p.account===acc&&!p.link&&!onCal(p)&&platOf(p.o)===s.calPlat);
     const kinds=['All',...POST_KINDS].map(k=>{const on=kind===k;return{label:k==='All'?'All types':k,count:String(k==='All'?C.length:C.filter(p=>p.kind===k).length),go:()=>this.setState({calPickKind:k}),bg:on?'var(--ink)':'#fff',fg:on?'#fff':'var(--ink-2)',bd:on?'var(--ink)':'var(--hairline-strong)'};});
