@@ -12,7 +12,7 @@ const SERVER="Google Sheets";
 const SHEET_URL="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/edit";
 const PIPE_TAB="'DM Pipeline'";
 const RANGES={
-  pipeline:"'DM Pipeline'!A2:AJ1000",
+  pipeline:"'DM Pipeline'!A2:AL3000",  // AK Verified, AL X user ID (3 Nov)
   targets:"'Target Accounts'!A3:N300",
   stats:"'DM Templates'!A3:K6",  // K4 = "DMs paused" switch
   templates:"'DM Templates'!A10:M40",
@@ -356,7 +356,7 @@ async function allow(){
 function fundKind(c){
   const f=String(c["Funding stage"]||"");
   if(!f)return "";
-  if(/^(series|public|acquired)/i.test(f))return "ok";
+  if(/^(series|public|acquired|big company|university lab)/i.test(f))return "ok";
   if(/^(seed|pre-seed)/i.test(f))return "early";
   return "unknown";
 }
